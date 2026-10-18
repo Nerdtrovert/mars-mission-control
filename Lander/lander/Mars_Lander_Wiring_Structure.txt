@@ -1,0 +1,93 @@
+MARS LANDER — ESP32 WIRING STRUCTURE
+Version: GPIO Map V1 (proposed)
+Board: ESP32 DevKit V1, ESP32-WROOM-32
+Purpose: Keep lander GPIO assignments consistent across firmware, wiring, and documentation.
+
+IMPORTANT STATUS
+- This is the agreed proposed pin map, not a verified physical wiring diagram.
+- Verify the exact ESP32 board variant and each module's electrical requirements before powering anything.
+- Do not change GPIO assignments without updating this file and the pin definitions at the top of lander.ino.
+- GPIO 21/22 are shared by the LCD and BMP280 on one I2C bus; verify their I2C addresses do not conflict.
+
+1. GPIO ASSIGNMENTS
+
+Component                 ESP32 GPIO     Connection / Notes
+---------------------------------------------------------------------------
+Servo 1 signal            GPIO 18        Signal only; use external servo supply
+Servo 2 signal            GPIO 19        Signal only; use external servo supply
+Physical gate button      GPIO 23        Proposed INPUT_PULLUP wiring
+Open limit switch         GPIO 32        Digital input
+Closed limit switch       GPIO 33        Digital input
+Green status LED          GPIO 25        Output; use suitable series resistor
+Red status LED            GPIO 26        Output; use suitable series resistor
+WS2812B data              GPIO 27        Verify logic-level requirements
+BMP280 SDA                GPIO 21        I2C SDA
+BMP280 SCL                GPIO 22        I2C SCL
+20x4 LCD SDA              GPIO 21        Shares I2C bus with BMP280
+20x4 LCD SCL              GPIO 22        Shares I2C bus with BMP280
+DHT11 data                GPIO 17        Digital data input
+Spare / reserved          GPIO 16        Leave unused unless map is updated
+Spare / reserved          GPIO 13        Leave unused unless map is updated
+Spare / reserved          GPIO 14        Leave unused unless map is updated
+Spare / reserved          GPIO 4         Leave unused unless map is updated
+
+2. SHARED I2C BUS
+- SDA: GPIO 21
+- SCL: GPIO 22
+- Connect LCD I2C backpack and BMP280 SDA/SCL to the same bus.
+- Verify their I2C addresses are different.
+- Check module logic-voltage compatibility; do not assume every I2C backpack is safe at 3.3V logic.
+
+3. POWER AND GROUND RULES
+- Do NOT power MG996R servos from the ESP32 3.3V pin.
+- Power both servos from a suitably rated regulated external supply/BEC.
+- Do not route servo current through ordinary breadboard power rails.
+- The WS2812B strip needs a suitable 5V supply sized for the actual strip and brightness.
+- Connect grounds together where required: ESP32, servo supply, and LED-strip supply need a common reference for control signals.
+- Verify the WS2812B data input accepts the ESP32's 3.3V signal; use a suitable level shifter if required.
+- ESP32 GPIOs use 3.3V logic and are not 5V tolerant. Never connect unknown-voltage signals to GPIOs.
+- Use suitable series resistors for the green and red indicator LEDs.
+- Avoid powering high-current loads from the ESP32 board regulator.
+
+4. INPUT WIRING (PROPOSED)
+- Physical button: proposed INPUT_PULLUP configuration; connect switch between GPIO 23 and GND. Pressed reads LOW; released reads HIGH.
+- Limit-switch NO/NC contacts must be selected based on the actual switches and final safety design.
+- Do not assume limit-switch HIGH/LOW meaning until wiring is confirmed and documented.
+- Debounce the physical button and limit switches as appropriate.
+
+5. FIRMWARE BEHAVIOUR DEPENDENCIES
+- One physical button toggles the gate only when the gate is confirmed OPEN or CLOSED.
+- Dashboard uses explicit OPEN_GATE and CLOSE_GATE commands.
+- Reject all new gate movement commands while gate is OPENING or CLOSING; do not queue commands.
+- At startup, read both limit switches:
+  * Closed switch active only -> CLOSED
+  * Open switch active only -> OPEN
+  * Neither active -> UNKNOWN
+  * Both active -> FAULT
+- Do not automatically move the gate at startup.
+- If movement times out without endpoint confirmation, enter FAULT and reject further gate movements until handled.
+- STANDBY: LCD displays STANDBY MODE; WS2812B strip remains illuminated; physical gate button, gate movement, and sensor polling are disabled. USB serial remains available for SET_ACTIVE and GET_STATUS.
+- If STANDBY is requested during gate movement, finish movement and confirm endpoint before entering STANDBY.
+- ACTIVE LCD rotation is approximately every 6 seconds:
+  1. Lander/gate status
+  2. BMP280 temperature and pressure
+  3. DHT11 temperature and humidity
+  4. Rover/drone status and USB link status
+- Dashboard displays both temperatures, pressure, humidity, gate state, and switch states simultaneously.
+- WS2812B uses a slow, colourful space-themed animation and remains on in ACTIVE and STANDBY.
+
+6. BOARD CAUTIONS
+- GPIOs 6-11 are typically connected to SPI flash on classic ESP32-WROOM-32 boards; do not use them for peripherals.
+- GPIOs 34-39 are input-only; do not assign outputs to them.
+- Avoid boot-strapping pins unless their startup behaviour has been checked.
+- This map assumes the classic ESP32-WROOM-32 DevKit V1. Recheck if the board variant differs.
+
+7. CHANGE CONTROL
+If any GPIO changes:
+1. Update this file.
+2. Update pin constants at the top of lander.ino.
+3. Update physical wiring and component labels.
+4. Update team documentation.
+5. Re-test startup, gate movement, limit switches, sensors, LEDs, and serial communication.
+
+END OF FILE
