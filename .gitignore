@@ -8,13 +8,33 @@ venv/
 # Environment variables and secrets
 .env
 .env.*
+.env*.local
 !.env.example
+!*.env.example
+!.env*.example
 
 # Runtime databases and logs
 *.db
+*.db-*
 *.sqlite
 *.sqlite3
+*-wal
+*-shm
+*-journal
+data/
+backend/data/
 logs/
+*.log
+
+# Build and temporary artifacts
+build/
+dist/
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.bak
 
 # Editor and OS files
 .DS_Store
