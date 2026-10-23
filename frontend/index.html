@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mars Mission Control — Exhibition Dashboard</title>
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=1.3.4">
+</head>
+<body>
+
+  <!-- Top Navigation & System Status Bar -->
+  <header class="dashboard-header">
+    <div class="brand-section">
+      <div class="mars-badge">MMC-1</div>
+      <div class="title-group">
+        <h1>MARS MISSION CONTROL</h1>
+        <p>AEROSPACE EXHIBITION • RED PLANET SURFACE GATE CONTROLLER</p>
+      </div>
+    </div>
+
+    <div class="status-badges">
+      <div id="clock-display" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--color-cyan); padding: 0.35rem 0.6rem; background: var(--bg-primary); border-radius: 4px; border: 1px solid var(--border-color);">
+        --:--:-- IST
+      </div>
+
+      <div id="ws-status-badge" class="badge state-not-connected">
+        <span class="badge-dot"></span>
+        <span class="badge-text">WS: CONNECTING</span>
+      </div>
+
+      <div id="gw-status-badge" class="badge state-not-connected">
+        <span class="badge-dot"></span>
+        <span class="badge-text">GATEWAY: UNKNOWN</span>
+      </div>
+
+      <div id="device-status-badge" class="badge state-not-connected">
+        <span class="badge-dot"></span>
+        <span class="badge-text">LANDER: UNKNOWN</span>
+      </div>
+
+      <div id="mode-badge" class="badge state-not-connected">
+        <span class="badge-dot"></span>
+        <span class="badge-text">MODE: --</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Offline / System Warning Banner -->
+  <div id="offline-banner" class="offline-banner hidden">
+    ⚠ CONNECTION DISRUPTED: RECONNECTING TO MISSION BACKEND... TELEMETRY STREAM MAY BE STALE.
+  </div>
+
+  <!-- Main Dashboard Grid Layout -->
+  <main class="dashboard-grid">
+
+    <!-- Card 1: Gate Actuator & Safety Controls -->
+    <section class="card gate-hero">
+      <div class="card-header">
+        <h2 class="card-title">PHYSICAL LANDER GATE</h2>
+        <span id="gate-mode-tag" style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">GROUND TRUTH</span>
+      </div>
+
+      <div id="gate-state-display" class="gate-state-indicator gate-state-unknown">
+        UNKNOWN
+      </div>
+
+      <div class="limit-switches-grid">
+        <div class="limit-item">
+          <span class="limit-label">OPEN LIMIT</span>
+          <span id="limit-open-led" class="limit-led"></span>
+        </div>
+        <div class="limit-item">
+          <span class="limit-label">CLOSED LIMIT</span>
+          <span id="limit-closed-led" class="limit-led"></span>
+        </div>
+      </div>
+
+      <div id="fault-box" class="fault-alert-box hidden">
+        <strong>HARDWARE FAULT LATCHED:</strong>
+        <span id="fault-code-text">NONE</span>
+        <div style="font-size: 0.75rem; margin-top: 0.25rem; color: #fca5a5;">
+          Movement commands inhibited until fault cleared and verified.
+        </div>
+      </div>
+
+      <div class="controls-grid">
+        <button id="btn-open-gate" class="btn btn-open" disabled>
+          DEPLOY / OPEN GATE
+        </button>
+        <button id="btn-close-gate" class="btn btn-close" disabled>
+          RETRACT / CLOSE GATE
+        </button>
+        <button id="btn-get-status" class="btn btn-secondary">
+          QUERY STATUS
+        </button>
+        <button id="btn-reset-session" class="btn btn-danger">
+          RESET SESSION
+        </button>
+      </div>
+
+      <div id="control-safety-notice" class="control-notice">
+        Verifying safety interlocks and hardware telemetry...
+      </div>
+    </section>
+
+    <!-- Card 2: Environmental Telemetry & Sensor Health -->
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">LANDER SENSOR TELEMETRY</h2>
+        <span id="telemetry-live-indicator" class="historical-indicator">
+          INITIALIZING...
+        </span>
+      </div>
+
+      <div class="sensors-grid">
+        <div class="metric-box">
+          <div class="metric-header">
+            <span class="metric-name">BMP280 TEMP</span>
+            <span id="health-bmp-temp" class="metric-health failed">N/A</span>
+          </div>
+          <div class="metric-value">
+            <span id="val-bmp-temp">--</span>
+            <span class="metric-unit">°C</span>
+          </div>
+        </div>
+
+        <div class="metric-box">
+          <div class="metric-header">
+            <span class="metric-name">BMP280 PRESSURE</span>
+            <span id="health-bmp-press" class="metric-health failed">N/A</span>
+          </div>
+          <div class="metric-value">
+            <span id="val-bmp-press">--</span>
+            <span class="metric-unit">hPa</span>
+          </div>
+        </div>
+
+        <div class="metric-box">
+          <div class="metric-header">
+            <span class="metric-name">DHT11 TEMP</span>
+            <span id="health-dht-temp" class="metric-health failed">N/A</span>
+          </div>
+          <div class="metric-value">
+            <span id="val-dht-temp">--</span>
+            <span class="metric-unit">°C</span>
+          </div>
+        </div>
+
+        <div class="metric-box">
+          <div class="metric-header">
+            <span class="metric-name">DHT11 HUMIDITY</span>
+            <span id="health-dht-hum" class="metric-health failed">N/A</span>
+          </div>
+          <div class="metric-value">
+            <span id="val-dht-hum">--</span>
+            <span class="metric-unit">%</span>
+          </div>
+        </div>
+
+        <div class="metric-box">
+          <div class="metric-header">
+            <span class="metric-name">ESP32 UPTIME</span>
+            <span class="metric-health ok">BOOT</span>
+          </div>
+          <div class="metric-value">
+            <span id="val-esp32-uptime">--</span>
+            <span class="metric-unit">HH:MM:SS</span>
+          </div>
+        </div>
+
+        <div class="metric-box">
+          <div class="metric-header">
+            <span class="metric-name">LAST INGESTION</span>
+            <span class="metric-health ok">HOST</span>
+          </div>
+          <div class="metric-value">
+            <span id="val-last-received" style="font-size: 1.1rem;">--</span>
+            <span class="metric-unit">IST</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Card 3: Command Lifecycle Audit Log -->
+    <section class="card" style="grid-column: 1 / -1;">
+      <div class="card-header">
+        <h2 class="card-title">COMMAND AUDIT & CORRELATION LIFECYCLE</h2>
+        <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">
+          ID MAPPING: UUID ↔ INT REQ_ID • UNCERTAINTY ISOLATION
+        </span>
+      </div>
+
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Command ID</th>
+              <th>Action</th>
+              <th>Status</th>
+              <th>Req ID</th>
+              <th>Created</th>
+              <th>Ack / Accepted</th>
+              <th>Outcome / Limit Switch Reason</th>
+            </tr>
+          </thead>
+          <tbody id="commands-audit-tbody">
+            <tr>
+              <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">
+                No commands recorded in this session.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Card 4: Recent Telemetry History (5-Minute Window) -->
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">TELEMETRY HISTORY (5-MIN RETENTION)</h2>
+        <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">
+          SLIDING WINDOW
+        </span>
+      </div>
+
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Host Timestamp</th>
+              <th>Gate</th>
+              <th>BMP Temp</th>
+              <th>Pressure</th>
+              <th>DHT Temp</th>
+              <th>Humidity</th>
+            </tr>
+          </thead>
+          <tbody id="telemetry-history-tbody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">
+                Awaiting telemetry samples...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Card 5: Mission Event Log -->
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">MISSION AUDIT LOG (EVENTS)</h2>
+        <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">
+          DEDUPLICATED PERSISTED EVENTS
+        </span>
+      </div>
+
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Type</th>
+              <th>Severity</th>
+              <th>Component</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody id="events-log-tbody">
+            <tr>
+              <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">
+                No mission events recorded.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal: Session Reset Confirmation -->
+  <div id="modal-reset-session" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h3>CONFIRM MISSION SESSION RESET</h3>
+      <p>
+        Resetting the session clears SQLite history (telemetry, commands, events) and reverts mission state to UNKNOWN.
+        Physical hardware state is NOT altered.
+      </p>
+      <div class="modal-actions">
+        <button id="modal-btn-cancel" class="btn btn-secondary">CANCEL</button>
+        <button id="modal-btn-confirm" class="btn btn-danger">CONFIRM RESET</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/dashboard.js?v=1.3.4"></script>
+</body>
+</html>
