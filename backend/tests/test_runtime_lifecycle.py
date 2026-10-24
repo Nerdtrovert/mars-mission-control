@@ -17,6 +17,7 @@ from app.telemetry.service import TelemetryService
 async def test_lifespan_startup_and_shutdown_no_task_leaks():
     """Verify that lifespan starts the runner and cleans up without leaking tasks."""
     from app.api.routes import simulator_runner
+    from app.api.routes import rover_runner
 
     assert simulator_runner.is_running is False
 
@@ -24,10 +25,13 @@ async def test_lifespan_startup_and_shutdown_no_task_leaks():
         assert simulator_runner.is_running is True
         assert simulator_runner._task is not None
         assert not simulator_runner._task.done()
+        assert rover_runner.is_running is True
 
     # After lifespan exit, the task must be cleanly stopped and cancelled
     assert simulator_runner.is_running is False
     assert simulator_runner._task is None
+    assert rover_runner.is_running is False
+    assert rover_runner._task is None
 
 
 def test_startup_does_not_invent_verified_gate_state():

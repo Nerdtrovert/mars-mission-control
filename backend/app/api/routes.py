@@ -10,6 +10,8 @@ from app.communication.gateway_contract import CommandName
 from app.communication.gateway_simulator import GatewaySimulator
 from app.communication.network_runner import NetworkGatewayRunner
 from app.communication.simulator_runner import SimulatorRunner
+from app.communication.rover_model import RoverSource, RoverStatus, offline_status
+from app.communication.rover_runner import RoverRunner
 from app.mission.command import (
     CommandSafetyViolation,
     CommandTracker,
@@ -89,6 +91,16 @@ def _derive_ws_url(http_url: str) -> str:
 
 
 GATEWAY_WS_URL = os.getenv("GATEWAY_WS_URL") or _derive_ws_url(GATEWAY_HTTP_URL)
+ROVER_MODE = os.getenv("ROVER_MODE", "simulator").lower()
+if ROVER_MODE not in ("simulator", "network"):
+    raise ValueError("ROVER_MODE must be 'simulator' or 'network'")
+
+
+def _publish_rover_status(status: RoverStatus) -> None:
+    dashboard_broadcaster.broadcast_sync({
+        "type": "rover_telemetry",
+        "rover": status.model_dump(mode="json"),
+    })
 
 # Default in-memory simulator for hardware-free development and tests
 gateway_simulator = GatewaySimulator(initial_gate_state=None)
@@ -133,6 +145,12 @@ else:
     )
     active_runner = simulator_runner
 
+rover_runner = RoverRunner(
+    mode=ROVER_MODE,
+    http_url=GATEWAY_HTTP_URL,
+    publish=_publish_rover_status,
+)
+
 
 class CommandSubmissionRequest(BaseModel):
     command: Optional[CommandName] = None
@@ -151,6 +169,12 @@ class CommandSubmissionRequest(BaseModel):
 def get_mission_state():
     """Preserved baseline endpoint returning the current mission state snapshot."""
     return _dashboard_state(mission_state.snapshot())
+
+
+@router.get("/api/rover/status")
+def get_rover_status():
+    """Return independent rover state using the common simulator/network contract."""
+    return rover_runner.snapshot().model_dump(mode="json")
 
 
 @router.get("/api/mission/commands")

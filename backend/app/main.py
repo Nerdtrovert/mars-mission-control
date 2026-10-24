@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import router, active_runner, simulator_runner, storage, dashboard_broadcaster
+from app.api.routes import router, active_runner, rover_runner, storage, dashboard_broadcaster
 
 # Frontend directory resolution
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -21,6 +21,7 @@ async def lifespan(app: FastAPI):
 
     # Managed startup: begin active gateway runner (simulator or network)
     await active_runner.start()
+    await rover_runner.start()
 
     # Continuous background telemetry retention cleaner (runs in all modes)
     async def _retention_loop():
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
         await active_runner.stop()
+        await rover_runner.stop()
 
 
 app = FastAPI(

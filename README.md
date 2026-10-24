@@ -80,6 +80,7 @@ pip install -r backend/requirements.txt
 Replace `<PI_IP_ADDRESS>` with the Pi's address on the private network. Network mode does not fall back to simulator mode if the Pi is unavailable.
 ```bash
 GATEWAY_MODE=network \
+ROVER_MODE=network \
 GATEWAY_HTTP_URL=http://<PI_IP_ADDRESS>:8001 \
 PYTHONPATH=backend backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
@@ -88,10 +89,25 @@ PYTHONPATH=backend backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --por
 ### Option B: Hardware-Free Simulator Mode (Local Testing)
 Runs with deterministic in-memory simulator without physical hardware or Raspberry Pi:
 ```bash
-GATEWAY_MODE=simulator PYTHONPATH=backend backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+GATEWAY_MODE=simulator ROVER_MODE=simulator PYTHONPATH=backend backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Backend settings are `GATEWAY_MODE`, `GATEWAY_HTTP_URL`, optional `GATEWAY_WS_URL`, and `MISSION_DB_PATH`. Use `backend/.env.example` for MacBook-only settings; the root `.env.example` is a combined reference for both component configurations. The backend loads the first applicable `.env` (root working-directory `.env` before `backend/.env`) without overriding existing shell environment variables. Keep local values in ignored `.env` files; examples contain no credentials.
+
+### Rover Mode (independent of the lander gateway mode)
+
+The backend setting `ROVER_MODE` is independent of `GATEWAY_MODE`. It defaults to `simulator`, which runs repeatable rover telemetry locally without a Pi or hardware. To use the Pi UDP receiver instead, set `ROVER_MODE=network` and point `GATEWAY_HTTP_URL` at the Pi. The Pi listens on `ROVER_UDP_HOST` (default `0.0.0.0`) and `ROVER_UDP_PORT` (default `5005`); `ROVER_OFFLINE_TIMEOUT_S` defaults to `2.0`.
+
+On the Pi, start the existing gateway command as usual; its separate UDP service starts with it:
+```bash
+ROVER_UDP_HOST=0.0.0.0 ROVER_UDP_PORT=5005 gateway/.venv/bin/uvicorn gateway.main:app --host 0.0.0.0 --port 8001
+```
+The rover team's Tkinter GUI must broadcast a UDP datagram about five times per second to the Pi, for example `DIST:145,PITCH:2.5,ROLL:-1.0,CMD:F,MODE:M,VOLT:11.8`. A hardware-free packet check from another machine on the LAN is:
+```bash
+python3 -c 'import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.sendto(b"DIST:145,PITCH:2.5,ROLL:-1.0,CMD:F,MODE:M,VOLT:11.8", ("<PI_IP_ADDRESS>", 5005))'
+curl http://<PI_IP_ADDRESS>:8001/api/rover/status
+```
+Only valid packets update rover state. The API marks telemetry `OFFLINE` after the configured silence timeout. The dashboard receives rover updates through its existing backend WebSocket. Battery percentage remains null until a defensible mapping for the installed 3S LiPo is established.
 
 ---
 

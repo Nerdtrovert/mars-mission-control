@@ -42,6 +42,25 @@ def test_simulator_generates_valid_esp32_telemetry():
     assert parsed["closed_limit"] is True
 
 
+def test_simulated_sensor_readings_vary_deterministically_within_plausible_ranges():
+    sim = GatewaySimulator()
+    sim.advance_clock(1000)
+    first = parse_telemetry(sim.generate_telemetry_line())
+    sim.advance_clock(1000)
+    second = parse_telemetry(sim.generate_telemetry_line())
+
+    assert first["bmp280_ok"] is True and first["dht11_ok"] is True
+    assert first["bmp_temperature_c"] != second["bmp_temperature_c"]
+    assert first["pressure_hpa"] != second["pressure_hpa"]
+    assert first["dht_temperature_c"] != second["dht_temperature_c"]
+    assert first["humidity_pct"] != second["humidity_pct"]
+    for sample in (first, second):
+        assert 20 <= sample["bmp_temperature_c"] <= 30
+        assert 990 <= sample["pressure_hpa"] <= 1030
+        assert 18 <= sample["dht_temperature_c"] <= 30
+        assert 30 <= sample["humidity_pct"] <= 80
+
+
 def test_simulator_unknown_initial_gate_state_does_not_assume_closed():
     sim = GatewaySimulator(initial_gate_state=None)
     status = sim.get_lander_status()

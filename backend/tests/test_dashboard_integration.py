@@ -368,15 +368,34 @@ def test_dashboard_does_not_present_history_or_simulator_as_live_hardware():
     assert "currentState.simulation_mode ? 'DATA: SIMULATOR'" in js_content
     assert "SIMULATOR DATA — NOT HARDWARE" in js_content
     assert "if (currentState.simulation_mode)" in js_content
-    assert "elBmpTemp.textContent = '--';" in js_content
-    assert "elBmpPress.textContent = '--';" in js_content
-    assert "elDhtTemp.textContent = '--';" in js_content
-    assert "elDhtHum.textContent = '--';" in js_content
-    assert "el.textContent = 'SIM';" in js_content
+    assert "SIM · OK" in js_content
+    assert "SIM · FAILED" in js_content
+    assert "elBmpTemp.textContent = Number(bmpTemp).toFixed(1);" in js_content
+    assert "elBmpPress.textContent = Number(bmpPress).toFixed(1);" in js_content
+    assert "elDhtTemp.textContent = Number(dhtTemp).toFixed(1);" in js_content
+    assert "elDhtHum.textContent = Number(dhtHum).toFixed(1);" in js_content
     assert "renderTelemetry(telemetryHistory[0]" not in js_content
 
     state = get_mission_state()
     assert isinstance(state["simulation_mode"], bool)
+
+
+def test_rover_contract_is_separate_and_dashboard_labels_source():
+    from app.api.routes import get_rover_status
+
+    rover = get_rover_status()
+    assert rover["rover_id"] == "mars-rover-01"
+    assert rover["source"] in ("simulator", "network")
+    assert "distance_cm" in rover and "battery_voltage_v" in rover
+    assert "gate_state" not in rover
+
+    html_content = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    js_content = (FRONTEND_DIR / "js" / "dashboard.js").read_text(encoding="utf-8")
+    assert "MARS ROVER TELEMETRY" in html_content
+    assert "SIMULATED" in html_content
+    assert "NETWORK / HARDWARE" in js_content
+    assert "rover_telemetry" in js_content
+    assert "reported command is telemetry only" in html_content.lower()
 
 
 def test_historical_telemetry_cannot_replace_newer_live_telemetry():

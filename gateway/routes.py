@@ -16,6 +16,7 @@ from app.communication.gateway_contract import (
 )
 
 if TYPE_CHECKING:
+    from gateway.rover_udp import RoverUDPReceiver
     from gateway.serial_manager import SerialManager
     from gateway.ws_manager import WebSocketBroadcaster
 
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 def create_gateway_router(
     serial_manager: SerialManager,
     ws_broadcaster: WebSocketBroadcaster,
+    rover_receiver: Optional["RoverUDPReceiver"] = None,
 ) -> APIRouter:
     """Creates FastAPI router configured with specific SerialManager and WebSocketBroadcaster."""
     router = APIRouter()
@@ -40,6 +42,12 @@ def create_gateway_router(
     @router.get("/api/lander/status", response_model=LanderStatusResponse)
     async def get_lander_status():
         return serial_manager.get_lander_status()
+
+    @router.get("/api/rover/status")
+    async def get_rover_status():
+        if rover_receiver is None:
+            return {"rover_id": "mars-rover-01", "connection_state": "OFFLINE", "source": "network"}
+        return rover_receiver.protocol.status()
 
     @router.post("/api/commands", response_model=CommandResponse)
     async def post_command(command: CommandRequest):

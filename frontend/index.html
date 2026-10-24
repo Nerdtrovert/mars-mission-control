@@ -181,6 +181,29 @@
       </div>
     </section>
 
+    <!-- Independent rover telemetry panel; this device never shares the lander command path. -->
+    <section class="card rover-card" aria-labelledby="rover-panel-title">
+      <div class="card-header">
+        <h2 id="rover-panel-title" class="card-title">MARS ROVER TELEMETRY</h2>
+        <span id="rover-source" class="rover-source">SIMULATED</span>
+      </div>
+      <div class="rover-status-row">
+        <span id="rover-connection" class="rover-connection offline">OFFLINE</span>
+        <span id="rover-last-seen" class="rover-last-seen">NO VALID PACKETS</span>
+      </div>
+      <p class="rover-note">Reported command is telemetry only; it does not confirm physical movement.</p>
+      <div class="rover-metrics">
+        <div class="metric-box"><span class="metric-name">OBSTACLE DISTANCE</span><div class="metric-value"><span id="rover-distance">--</span><span class="metric-unit">cm</span></div></div>
+        <div class="metric-box"><span class="metric-name">PITCH / ROLL</span><div class="metric-value"><span id="rover-attitude">-- / --</span><span class="metric-unit">°</span></div></div>
+        <div class="metric-box"><span class="metric-name">REPORTED CMD</span><div class="metric-value"><span id="rover-command">--</span></div></div>
+        <div class="metric-box"><span class="metric-name">DRIVE MODE</span><div class="metric-value"><span id="rover-mode">--</span></div></div>
+        <div class="metric-box"><span class="metric-name">BATTERY VOLTAGE</span><div class="metric-value"><span id="rover-voltage">--</span><span class="metric-unit">V</span></div></div>
+        <div class="metric-box"><span class="metric-name">BATTERY CAPACITY</span><div class="metric-value"><span id="rover-battery-pct">--</span><span class="metric-unit">%</span></div></div>
+      </div>
+      <div id="rover-event" class="rover-event">Waiting for rover telemetry.</div>
+      <div class="rover-footnote">Battery percentage unavailable until a validated 3S LiPo mapping is established.</div>
+    </section>
+
     <!-- Card 3: Command Lifecycle Audit Log -->
     <section class="card" style="grid-column: 1 / -1;">
       <div class="card-header">

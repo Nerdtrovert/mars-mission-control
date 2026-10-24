@@ -125,6 +125,39 @@
   const elModalCancel = document.getElementById('modal-btn-cancel');
   const elModalConfirm = document.getElementById('modal-btn-confirm');
 
+  const roverElements = {
+    connection: document.getElementById('rover-connection'),
+    source: document.getElementById('rover-source'),
+    lastSeen: document.getElementById('rover-last-seen'),
+    distance: document.getElementById('rover-distance'),
+    attitude: document.getElementById('rover-attitude'),
+    command: document.getElementById('rover-command'),
+    mode: document.getElementById('rover-mode'),
+    voltage: document.getElementById('rover-voltage'),
+    batteryPct: document.getElementById('rover-battery-pct'),
+    event: document.getElementById('rover-event')
+  };
+
+  function renderRoverStatus(rover) {
+    if (!rover || rover.rover_id !== 'mars-rover-01') return;
+    const online = rover.connection_state === 'ONLINE';
+    roverElements.connection.textContent = online ? 'ONLINE' : 'OFFLINE';
+    roverElements.connection.className = 'rover-connection ' + (online ? 'online' : 'offline');
+    roverElements.source.textContent = rover.source === 'simulator' ? 'SIMULATED DATA' : 'NETWORK / HARDWARE';
+    roverElements.lastSeen.textContent = rover.last_seen
+      ? `LAST VALID PACKET ${formatTimeIST(rover.last_seen)} IST${online ? '' : ' • STALE'}`
+      : 'NO VALID PACKETS';
+    roverElements.distance.textContent = rover.distance_cm == null ? '--' : Number(rover.distance_cm).toFixed(1);
+    roverElements.attitude.textContent = rover.pitch_deg == null || rover.roll_deg == null
+      ? '-- / --'
+      : `${Number(rover.pitch_deg).toFixed(1)} / ${Number(rover.roll_deg).toFixed(1)}`;
+    roverElements.command.textContent = rover.command || '--';
+    roverElements.mode.textContent = rover.mode === 'M' ? 'MANUAL' : rover.mode === 'A' ? 'AUTONOMOUS' : '--';
+    roverElements.voltage.textContent = rover.battery_voltage_v == null ? '--' : Number(rover.battery_voltage_v).toFixed(2);
+    roverElements.batteryPct.textContent = rover.battery_percentage == null ? '--' : Number(rover.battery_percentage).toFixed(0);
+    roverElements.event.textContent = rover.event || (rover.obstacle_detected ? 'Obstacle detected' : 'No active rover event.');
+  }
+
   // --- Indian Standard Time (IST, UTC+05:30) Timezone Formatters ---
   const istTimeFormatter = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Kolkata',
@@ -401,17 +434,6 @@
       elLiveIndicator.style.color = 'var(--color-amber)';
     }
 
-    if (currentState.simulation_mode) {
-      // Simulator samples are not measurements from the Pi or ESP32 hardware.
-      elBmpTemp.textContent = '--';
-      elBmpPress.textContent = '--';
-      elDhtTemp.textContent = '--';
-      elDhtHum.textContent = '--';
-      [elHealthBmpTemp, elHealthBmpPress, elHealthDhtTemp, elHealthDhtHum].forEach((el) => {
-        el.textContent = 'SIM';
-        el.className = 'metric-health';
-      });
-    } else {
     // BMP280
     const bmpTemp = telem.bmp_temperature_c !== undefined && telem.bmp_temperature_c !== null
       ? telem.bmp_temperature_c
@@ -425,8 +447,8 @@
 
     if (bmpOk === true && bmpTemp !== null && bmpTemp !== undefined) {
       elBmpTemp.textContent = Number(bmpTemp).toFixed(1);
-      elHealthBmpTemp.textContent = bmpOk ? 'OK' : 'FAILED';
-      elHealthBmpTemp.className = bmpOk ? 'metric-health ok' : 'metric-health failed';
+      elHealthBmpTemp.textContent = 'OK';
+      elHealthBmpTemp.className = 'metric-health ok';
     } else {
       elBmpTemp.textContent = '--';
       elHealthBmpTemp.textContent = 'FAILED';
@@ -435,8 +457,8 @@
 
     if (bmpOk === true && bmpPress !== null && bmpPress !== undefined) {
       elBmpPress.textContent = Number(bmpPress).toFixed(1);
-      elHealthBmpPress.textContent = bmpOk ? 'OK' : 'FAILED';
-      elHealthBmpPress.className = bmpOk ? 'metric-health ok' : 'metric-health failed';
+      elHealthBmpPress.textContent = 'OK';
+      elHealthBmpPress.className = 'metric-health ok';
     } else {
       elBmpPress.textContent = '--';
       elHealthBmpPress.textContent = 'FAILED';
@@ -456,8 +478,8 @@
 
     if (dhtOk === true && dhtTemp !== null && dhtTemp !== undefined) {
       elDhtTemp.textContent = Number(dhtTemp).toFixed(1);
-      elHealthDhtTemp.textContent = dhtOk ? 'OK' : 'FAILED';
-      elHealthDhtTemp.className = dhtOk ? 'metric-health ok' : 'metric-health failed';
+      elHealthDhtTemp.textContent = 'OK';
+      elHealthDhtTemp.className = 'metric-health ok';
     } else {
       elDhtTemp.textContent = '--';
       elHealthDhtTemp.textContent = 'FAILED';
@@ -466,15 +488,26 @@
 
     if (dhtOk === true && dhtHum !== null && dhtHum !== undefined) {
       elDhtHum.textContent = Number(dhtHum).toFixed(1);
-      elHealthDhtHum.textContent = dhtOk ? 'OK' : 'FAILED';
-      elHealthDhtHum.className = dhtOk ? 'metric-health ok' : 'metric-health failed';
+      elHealthDhtHum.textContent = 'OK';
+      elHealthDhtHum.className = 'metric-health ok';
     } else {
       elDhtHum.textContent = '--';
       elHealthDhtHum.textContent = 'FAILED';
       elHealthDhtHum.className = 'metric-health failed';
     }
-    }
 
+    if (currentState.simulation_mode) {
+      const simulatedSensorStatus = (healthy) => healthy ? 'SIM · OK' : 'SIM · FAILED';
+      [
+        [elHealthBmpTemp, bmpOk && bmpTemp !== null && bmpTemp !== undefined],
+        [elHealthBmpPress, bmpOk && bmpPress !== null && bmpPress !== undefined],
+        [elHealthDhtTemp, dhtOk && dhtTemp !== null && dhtTemp !== undefined],
+        [elHealthDhtHum, dhtOk && dhtHum !== null && dhtHum !== undefined]
+      ].forEach(([el, healthy]) => {
+        el.textContent = simulatedSensorStatus(healthy);
+        el.className = healthy ? 'metric-health ok' : 'metric-health failed';
+      });
+    }
     // Uptime formatted as duration (HH:MM:SS or Xd HH:MM:SS)
     if (telem.timestamp_ms !== undefined && telem.timestamp_ms !== null) {
       elEspUptime.textContent = formatUptime(telem.timestamp_ms);
@@ -665,11 +698,12 @@
   // --- API Fetch Polling Fallback ---
   async function pollMissionData() {
     try {
-      const [resState, resCmds, resEvents, resTelem] = await Promise.all([
+      const [resState, resCmds, resEvents, resTelem, resRover] = await Promise.all([
         fetch('/api/mission/state'),
         fetch('/api/mission/commands'),
         fetch('/api/mission/events'),
-        fetch('/api/mission/telemetry/history')
+        fetch('/api/mission/telemetry/history'),
+        fetch('/api/rover/status')
       ]);
 
       if (resState.ok) {
@@ -689,6 +723,7 @@
         telemetryHistory = await resTelem.json();
         renderTelemetryHistory(telemetryHistory);
       }
+      if (resRover.ok) renderRoverStatus(await resRover.json());
 
       // Successful poll clears any stale connection disruption warning
       elOfflineBanner.classList.add('hidden');
@@ -757,6 +792,8 @@
           } else if (diagnostic) {
             completeUptimeDiagnostic(diagnostic, 'missing_telemetry_payload');
           }
+        } else if (msg.type === 'rover_telemetry') {
+          renderRoverStatus(msg.rover);
         } else if (msg.type === 'command_update') {
           pollMissionData();
         } else if (msg.type === 'event') {

@@ -11,6 +11,7 @@ from gateway.routes import create_gateway_router
 from gateway.serial_manager import SerialManager
 from gateway.transport import PySerialTransport, SerialTransport
 from gateway.ws_manager import WebSocketBroadcaster
+from gateway.rover_udp import RoverUDPReceiver
 
 
 def create_gateway_app(
@@ -22,13 +23,16 @@ def create_gateway_app(
     ws_broadcaster = WebSocketBroadcaster()
     trans = transport or PySerialTransport(port=cfg.serial_port, baud_rate=cfg.baud_rate)
     serial_mgr = SerialManager(config=cfg, transport=trans, ws_broadcaster=ws_broadcaster)
+    rover_receiver = RoverUDPReceiver(config=cfg, broadcaster=ws_broadcaster)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await serial_mgr.start()
+        await rover_receiver.start()
         try:
             yield
         finally:
+            await rover_receiver.stop()
             await serial_mgr.stop()
 
     app = FastAPI(
@@ -43,9 +47,10 @@ def create_gateway_app(
     app.state.transport = trans
     app.state.serial_manager = serial_mgr
     app.state.ws_broadcaster = ws_broadcaster
+    app.state.rover_receiver = rover_receiver
 
     # Include routes
-    router = create_gateway_router(serial_mgr, ws_broadcaster)
+    router = create_gateway_router(serial_mgr, ws_broadcaster, rover_receiver)
     app.include_router(router)
 
     return app

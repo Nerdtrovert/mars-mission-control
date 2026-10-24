@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 import json
 import logging
 from typing import Optional, TYPE_CHECKING
-import websockets
 
 from app.communication.gateway_client import GatewayClient
 from app.mission.state import MissionStateManager
@@ -98,6 +97,10 @@ class NetworkGatewayRunner:
 
     async def _ws_listener_loop(self) -> None:
         """Persistent WebSocket loop with bounded exponential backoff."""
+        # Keep simulator-only startup usable without loading the network client.
+        # Network mode still requires the declared ``websockets`` dependency.
+        import websockets
+
         delay = self.reconnect_initial_delay_s
 
         while not self._stop_event.is_set():

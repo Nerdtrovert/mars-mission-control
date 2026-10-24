@@ -245,6 +245,59 @@ header.dashboard-header {
   border-radius: 2px;
 }
 
+/* Rover telemetry remains visually distinct from the physical lander controls. */
+.rover-card {
+  border-color: var(--border-highlight);
+}
+
+.rover-card .card-title::before {
+  background-color: var(--color-cyan);
+}
+
+.rover-source,
+.rover-connection,
+.rover-last-seen,
+.rover-note,
+.rover-event,
+.rover-footnote {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.rover-source {
+  color: var(--color-amber);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  font-weight: 700;
+}
+
+.rover-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rover-connection { font-weight: 800; color: var(--color-red); }
+.rover-connection.online { color: var(--color-green); }
+.rover-last-seen, .rover-note, .rover-footnote { color: var(--text-muted); }
+.rover-note { line-height: 1.5; }
+
+.rover-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.rover-event {
+  color: var(--color-cyan);
+  background: var(--bg-primary);
+  border-left: 2px solid var(--color-cyan);
+  padding: 0.65rem 0.75rem;
+  min-height: 2.3rem;
+}
+
 /* Gate Status Display */
 .gate-hero {
   display: flex;

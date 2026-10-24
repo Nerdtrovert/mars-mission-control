@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import math
 from typing import Any, Optional
 
 from app.communication.gateway_contract import (
@@ -66,6 +67,13 @@ class GatewaySimulator:
     def advance_clock(self, delta_ms: int) -> None:
         """Deterministically advance virtual time."""
         self.clock_ms += max(0, delta_ms)
+        seconds = self.clock_ms / 1000.0
+        # Smooth, bounded demonstration variation with plausible ambient values.
+        # The virtual clock keeps simulator output repeatable in tests.
+        self.bmp_temp = round(24.2 + 1.2 * math.sin(seconds / 7.0), 1)
+        self.pressure = round(1013.5 + 3.0 * math.cos(seconds / 11.0), 1)
+        self.dht_temp = round(24.0 + 1.0 * math.sin(seconds / 9.0 + 0.6), 1)
+        self.humidity = round(58.0 + 6.0 * math.sin(seconds / 13.0 + 1.1), 1)
 
     def trigger_disconnect(self, target: str = "gateway") -> None:
         """Simulate physical network or serial disconnection."""
