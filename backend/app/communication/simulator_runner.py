@@ -52,8 +52,8 @@ class SimulatorRunner:
         """
         Execute one deterministic cycle:
         1. Check and update gateway health independently.
-        2. If gateway and device are connected, advance physical movement,
-           advance virtual clock, generate telemetry, and ingest via gateway client.
+        2. If gateway and device are connected, advance virtual sensor time,
+           generate telemetry, and ingest via gateway client.
         3. Explicitly evaluate connection staleness against the provided or current time.
         """
         current_time = now or datetime.now(timezone.utc)

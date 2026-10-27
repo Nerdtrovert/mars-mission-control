@@ -9,9 +9,6 @@
   // --- State Cache ---
   let currentState = {
     mode: 'UNKNOWN',
-    gate_state: 'UNKNOWN',
-    limit_switches: { open: false, closed: false },
-    latched_fault: null,
     gateway_state: 'NOT_CONNECTED',
     device_state: 'NOT_CONNECTED',
     last_telemetry_timestamp_ms: null,
@@ -92,17 +89,12 @@
   const elModeBadge = document.getElementById('mode-badge');
   const elOfflineBanner = document.getElementById('offline-banner');
 
-  const elGateState = document.getElementById('gate-state-display');
-  const elLimitOpen = document.getElementById('limit-open-led');
-  const elLimitClosed = document.getElementById('limit-closed-led');
-  const elFaultBox = document.getElementById('fault-box');
-  const elFaultText = document.getElementById('fault-code-text');
-
-  const elBtnOpen = document.getElementById('btn-open-gate');
-  const elBtnClose = document.getElementById('btn-close-gate');
+  const elLanderMode = document.getElementById('lander-mode-display');
   const elBtnStatus = document.getElementById('btn-get-status');
+  const elBtnActive = document.getElementById('btn-set-active');
+  const elBtnStandby = document.getElementById('btn-set-standby');
   const elBtnReset = document.getElementById('btn-reset-session');
-  const elSafetyNotice = document.getElementById('control-safety-notice');
+  const elControlNotice = document.getElementById('control-status-notice');
 
   const elLiveIndicator = document.getElementById('telemetry-live-indicator');
   const elBmpTemp = document.getElementById('val-bmp-temp');
@@ -133,8 +125,6 @@
     attitude: document.getElementById('rover-attitude'),
     command: document.getElementById('rover-command'),
     mode: document.getElementById('rover-mode'),
-    voltage: document.getElementById('rover-voltage'),
-    batteryPct: document.getElementById('rover-battery-pct'),
     event: document.getElementById('rover-event')
   };
 
@@ -153,8 +143,6 @@
       : `${Number(rover.pitch_deg).toFixed(1)} / ${Number(rover.roll_deg).toFixed(1)}`;
     roverElements.command.textContent = rover.command || '--';
     roverElements.mode.textContent = rover.mode === 'M' ? 'MANUAL' : rover.mode === 'A' ? 'AUTONOMOUS' : '--';
-    roverElements.voltage.textContent = rover.battery_voltage_v == null ? '--' : Number(rover.battery_voltage_v).toFixed(2);
-    roverElements.batteryPct.textContent = rover.battery_percentage == null ? '--' : Number(rover.battery_percentage).toFixed(0);
     roverElements.event.textContent = rover.event || (rover.obstacle_detected ? 'Obstacle detected' : 'No active rover event.');
   }
 
@@ -219,110 +207,21 @@
     }
   }
 
-  // --- Safety Interlock & Control Gating ---
-  function updateSafetyControls() {
+  // --- Non-actuating Lander Status Controls ---
+  function updateControlAvailability() {
     const gwOnline = currentState.gateway_state === 'ONLINE';
     const devOnline = currentState.device_state === 'ONLINE';
-    const gate = currentState.gate_state;
-    const hasFault = Boolean(currentState.latched_fault);
-
-    // Any unresolved command in flight?
     isCommandInFlight = recentCommands.some(
       c => c.status === 'CREATED' || c.status === 'SENT' || c.status === 'ACKNOWLEDGED'
     );
-
-    let openEnabled = false;
-    let closeEnabled = false;
-    let statusEnabled = false;
-    let safetyReasons = [];
-
-    if (!gwOnline) {
-      safetyReasons.push('Gateway offline');
-    }
-    if (!devOnline) {
-      safetyReasons.push('Lander device offline');
-    }
-    if (hasFault) {
-      safetyReasons.push(`Fault latched (${currentState.latched_fault})`);
-    }
-    if (isCommandInFlight) {
-      safetyReasons.push('Command in-flight');
-    }
-
-    if (gwOnline && devOnline && !hasFault && !isCommandInFlight) {
-      statusEnabled = true;
-
-      if (gate === 'CLOSED') {
-        openEnabled = true;
-      } else if (gate === 'OPEN') {
-        closeEnabled = true;
-      } else {
-        safetyReasons.push(`Gate is ${gate} (movement inhibited)`);
-      }
-    }
-
-    elBtnOpen.disabled = !openEnabled;
-    elBtnClose.disabled = !closeEnabled;
-    elBtnStatus.disabled = !statusEnabled;
-
-    if (safetyReasons.length === 0) {
-      elSafetyNotice.textContent = 'All safety interlocks nominal. Controls armed.';
-      elSafetyNotice.style.color = 'var(--color-green)';
-    } else {
-      elSafetyNotice.textContent = 'SAFETY GATED: ' + safetyReasons.join(' • ');
-      elSafetyNotice.style.color = 'var(--color-amber)';
-    }
-  }
-
-  // --- Render Gate State ---
-  function renderGateState() {
-    const s = currentState.gate_state || 'UNKNOWN';
-    elGateState.textContent = s;
-    elGateState.className = 'gate-state-indicator';
-
-    switch (s) {
-      case 'CLOSED':
-        elGateState.classList.add('gate-state-closed');
-        break;
-      case 'OPEN':
-        elGateState.classList.add('gate-state-open');
-        break;
-      case 'OPENING':
-        elGateState.classList.add('gate-state-opening');
-        break;
-      case 'CLOSING':
-        elGateState.classList.add('gate-state-closing');
-        break;
-      case 'FAULT':
-        elGateState.classList.add('gate-state-fault');
-        break;
-      default:
-        elGateState.classList.add('gate-state-unknown');
-    }
-
-    // Limit LEDs
-    if (currentState.limit_switches) {
-      if (currentState.limit_switches.open) {
-        elLimitOpen.classList.add('active');
-      } else {
-        elLimitOpen.classList.remove('active');
-      }
-
-      if (currentState.limit_switches.closed) {
-        elLimitClosed.classList.add('active');
-      } else {
-        elLimitClosed.classList.remove('active');
-      }
-    }
-
-    // Latched Fault
-    if (currentState.latched_fault) {
-      elFaultBox.classList.remove('hidden');
-      elFaultText.textContent = currentState.latched_fault;
-    } else {
-      elFaultBox.classList.add('hidden');
-      elFaultText.textContent = 'NONE';
-    }
+    const ready = gwOnline && devOnline && !isCommandInFlight;
+    elBtnStatus.disabled = !ready;
+    elBtnActive.disabled = !ready;
+    elBtnStandby.disabled = !ready;
+    elControlNotice.textContent = ready ? 'Status and operating-mode commands available.' : 'Gateway or lander unavailable, or command in flight.';
+    elControlNotice.style.color = ready ? 'var(--color-green)' : 'var(--color-amber)';
+    elLanderMode.textContent = currentState.mode || 'UNKNOWN';
+    elLanderMode.className = 'lander-mode-indicator ' + String(currentState.mode || '').toLowerCase();
   }
 
   // --- Duration Formatter for ESP32 Uptime ---
@@ -540,7 +439,7 @@
       } else if (cmd.acknowledged_at || cmd.status === 'ACKNOWLEDGED' || cmd.status === 'COMPLETED') {
         ackText = '✔ Accepted';
       }
-      const outcome = cmd.error_reason || cmd.error_message || (cmd.completed_at ? 'Confirmed by switches' : '—');
+      const outcome = cmd.error_reason || cmd.error_message || (cmd.completed_at ? 'Completed' : '—');
       const actionName = cmd.name || cmd.command_type || cmd.command || '—';
 
       return `
@@ -590,7 +489,7 @@
       return `
         <tr>
           <td style="font-family: var(--font-mono);">${ts}</td>
-          <td><span class="status-pill pill-${(row.gate_state || '').toLowerCase()}">${row.gate_state || 'UNKNOWN'}</span></td>
+          <td><span class="status-pill">${row.mode || 'UNKNOWN'}</span></td>
           <td>${bTemp}</td>
           <td>${press}</td>
           <td>${dTemp}</td>
@@ -638,14 +537,11 @@
     if (Number.isFinite(incomingUpdatedAt)) currentState.updated_at = stateData.updated_at;
 
     currentState.mode = stateData.mode || currentState.mode;
-    if (typeof stateData.gate_state === 'string') currentState.gate_state = stateData.gate_state;
     currentState.gateway_state = stateData.gateway_state || currentState.gateway_state;
     currentState.device_state = stateData.device_state || currentState.device_state;
     if (stateData.last_telemetry_timestamp_ms !== undefined) {
       currentState.last_telemetry_timestamp_ms = stateData.last_telemetry_timestamp_ms;
     }
-    currentState.limit_switches = stateData.limit_switches || currentState.limit_switches;
-    currentState.latched_fault = stateData.latched_fault || null;
     if (stateData.last_device_status_timestamp_ms !== undefined) {
       currentState.last_device_status_timestamp_ms = stateData.last_device_status_timestamp_ms;
     }
@@ -683,16 +579,12 @@
     modeText.textContent = currentState.simulation_mode ? 'DATA: SIMULATOR' : `MODE: ${currentState.mode}`;
     elModeBadge.className = 'badge ' + (currentState.simulation_mode ? 'state-stale' : 'state-online');
 
-    // Gate & Limits
-    renderGateState();
-
     // Latest Telemetry if present in state snapshot
     if (stateData.last_telemetry) {
       renderTelemetry(stateData.last_telemetry, 'snapshot');
     }
 
-    // Safety Interlocks
-    updateSafetyControls();
+    updateControlAvailability();
   }
 
   // --- API Fetch Polling Fallback ---
@@ -713,7 +605,7 @@
       if (resCmds.ok) {
         recentCommands = await resCmds.json();
         renderCommands(recentCommands);
-        updateSafetyControls();
+        updateControlAvailability();
       }
       if (resEvents.ok) {
         recentEvents = await resEvents.json();
@@ -869,9 +761,9 @@
   }
 
   // --- Event Listeners ---
-  elBtnOpen.addEventListener('click', () => sendCommand('OPEN_GATE'));
-  elBtnClose.addEventListener('click', () => sendCommand('CLOSE_GATE'));
   elBtnStatus.addEventListener('click', () => sendCommand('GET_STATUS'));
+  elBtnActive.addEventListener('click', () => sendCommand('SET_ACTIVE'));
+  elBtnStandby.addEventListener('click', () => sendCommand('SET_STANDBY'));
 
   elBtnReset.addEventListener('click', () => {
     elResetModal.classList.remove('hidden');

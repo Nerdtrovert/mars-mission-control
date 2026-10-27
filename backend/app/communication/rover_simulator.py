@@ -53,15 +53,12 @@ class RoverSimulator:
             event = None
         mode = RoverMode.MANUAL if (self.tick // 40) % 2 == 0 else RoverMode.AUTONOMOUS
         distance = max(0.0, 145.0 - self.tick * 0.35)
-        voltage = max(9.6, 12.6 - self.tick * 0.001)
         self._status = RoverStatus(
             distance_cm=round(distance, 1),
             pitch_deg=round(3.2 * math.sin(self.tick / 8), 1),
             roll_deg=round(2.4 * math.cos(self.tick / 11), 1),
             command=command,
             mode=mode,
-            battery_voltage_v=round(voltage, 2),
-            battery_percentage=None,
             connection_state=RoverConnectionState.ONLINE,
             last_seen=current,
             source=RoverSource.SIMULATOR,

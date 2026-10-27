@@ -130,8 +130,6 @@ class NetworkGatewayRunner:
                             msg_type = payload.get("type")
                             if msg_type == "telemetry":
                                 self.gateway_client.ingest_telemetry_line(msg_text, timestamp=now_iso)
-                            elif msg_type == "gate_status":
-                                self.gateway_client.ingest_gate_status(payload)
                         except Exception as e:
                             logger.error(f"Error processing gateway WS message: {e}")
 

@@ -298,8 +298,8 @@ header.dashboard-header {
   min-height: 2.3rem;
 }
 
-/* Gate Status Display */
-.gate-hero {
+/* Lander operating mode status */
+.lander-status-card {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -309,118 +309,19 @@ header.dashboard-header {
   border: 2px solid var(--border-color);
   border-radius: 8px;
   gap: 0.75rem;
-  position: relative;
-  overflow: hidden;
 }
 
-.gate-state-indicator {
+.lander-mode-indicator {
   font-size: 2.2rem;
   font-weight: 900;
   letter-spacing: 0.1em;
   font-family: var(--font-mono);
   text-transform: uppercase;
-}
-
-.gate-state-closed {
-  color: var(--color-green);
-  text-shadow: 0 0 15px var(--color-green-glow);
-}
-
-.gate-state-open {
-  color: var(--color-cyan);
-  text-shadow: 0 0 15px var(--color-cyan-glow);
-}
-
-.gate-state-opening,
-.gate-state-closing {
   color: var(--color-amber);
-  text-shadow: 0 0 15px var(--color-amber-glow);
-  animation: pulse-amber 1.5s infinite;
 }
 
-.gate-state-unknown {
-  color: #eab308;
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(234, 179, 8, 0.08),
-    rgba(234, 179, 8, 0.08) 10px,
-    rgba(234, 179, 8, 0.15) 10px,
-    rgba(234, 179, 8, 0.15) 20px
-  );
-  padding: 0.25rem 1rem;
-  border-radius: 4px;
-}
-
-.gate-state-fault {
-  color: var(--color-red);
-  text-shadow: 0 0 15px var(--color-red-glow);
-  animation: flash-red 1s infinite;
-}
-
-@keyframes pulse-amber {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-@keyframes flash-red {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-/* Limit Switches Indicator */
-.limit-switches-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-  width: 100%;
-}
-
-.limit-item {
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.limit-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.limit-led {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: #334155;
-  border: 1px solid #475569;
-}
-
-.limit-led.active {
-  background-color: var(--color-green);
-  box-shadow: 0 0 8px var(--color-green);
-  border-color: #86efac;
-}
-
-/* Hardware Fault Alert Banner */
-.fault-alert-box {
-  background-color: rgba(239, 68, 68, 0.15);
-  border: 1px solid var(--color-red);
-  border-radius: 6px;
-  padding: 0.75rem 1rem;
-  color: #fca5a5;
-  font-size: 0.85rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.fault-alert-box.hidden {
-  display: none;
-}
+.lander-mode-indicator.active { color: var(--color-green); }
+.lander-mode-indicator.standby { color: var(--color-cyan); }
 
 /* Actuation Controls */
 .controls-grid {
@@ -446,23 +347,23 @@ header.dashboard-header {
   transition: all 0.15s ease-in-out;
 }
 
-.btn-open {
+.btn-primary {
   background-color: rgba(0, 210, 255, 0.15);
   color: var(--color-cyan);
   border-color: var(--color-cyan);
 }
-.btn-open:hover:not(:disabled) {
+.btn-primary:hover:not(:disabled) {
   background-color: var(--color-cyan);
   color: #000;
   box-shadow: 0 0 15px var(--color-cyan-glow);
 }
 
-.btn-close {
+.btn-mode-secondary {
   background-color: rgba(16, 185, 129, 0.15);
   color: var(--color-green);
   border-color: var(--color-green);
 }
-.btn-close:hover:not(:disabled) {
+.btn-mode-secondary:hover:not(:disabled) {
   background-color: var(--color-green);
   color: #000;
   box-shadow: 0 0 15px var(--color-green-glow);

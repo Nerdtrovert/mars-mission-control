@@ -26,10 +26,10 @@ def parse_rover_datagram(data: bytes) -> dict[str, Any]:
         if ":" not in part:
             raise ValueError("field must use KEY:VALUE format")
         key, value = (segment.strip() for segment in part.split(":", 1))
-        if key not in {"DIST", "PITCH", "ROLL", "CMD", "MODE", "VOLT"} or key in fields or not value:
+        if key not in {"DIST", "PITCH", "ROLL", "CMD", "MODE"} or key in fields or not value:
             raise ValueError("unknown, duplicate, or empty field")
         fields[key] = value
-    required = {"DIST", "PITCH", "ROLL", "CMD", "MODE", "VOLT"}
+    required = {"DIST", "PITCH", "ROLL", "CMD", "MODE"}
     if fields.keys() != required:
         raise ValueError("all rover telemetry fields are required")
 
@@ -37,12 +37,11 @@ def parse_rover_datagram(data: bytes) -> dict[str, Any]:
         distance = float(fields["DIST"])
         pitch = float(fields["PITCH"])
         roll = float(fields["ROLL"])
-        voltage = float(fields["VOLT"])
     except ValueError as exc:
         raise ValueError("numeric rover fields must be valid numbers") from exc
-    if not all(math.isfinite(value) for value in (distance, pitch, roll, voltage)):
+    if not all(math.isfinite(value) for value in (distance, pitch, roll)):
         raise ValueError("numeric rover fields must be finite")
-    if not 0 <= distance <= 100000 or not -90 <= pitch <= 90 or not -90 <= roll <= 90 or not 0 <= voltage <= 20:
+    if not 0 <= distance <= 400 or not -90 <= pitch <= 90 or not -90 <= roll <= 90:
         raise ValueError("rover numeric field is outside allowed range")
     if fields["CMD"] not in {value.value for value in RoverCommand}:
         raise ValueError("unsupported rover command")
@@ -54,7 +53,6 @@ def parse_rover_datagram(data: bytes) -> dict[str, Any]:
         "roll_deg": roll,
         "command": fields["CMD"],
         "mode": fields["MODE"],
-        "battery_voltage_v": voltage,
     }
 
 
@@ -110,8 +108,6 @@ class RoverUDPProtocol(asyncio.DatagramProtocol):
             "roll_deg": self._data.get("roll_deg"),
             "command": self._data.get("command"),
             "mode": self._data.get("mode"),
-            "battery_voltage_v": self._data.get("battery_voltage_v"),
-            "battery_percentage": None,
             "connection_state": RoverConnectionState.ONLINE.value if online else RoverConnectionState.OFFLINE.value,
             "last_seen": self._last_seen,
             "source": "network",

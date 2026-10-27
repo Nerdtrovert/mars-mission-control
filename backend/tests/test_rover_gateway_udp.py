@@ -5,7 +5,7 @@ import pytest
 from gateway.config import GatewayConfig
 from gateway.main import create_gateway_app
 from gateway.rover_udp import RoverUDPProtocol, RoverUDPReceiver, parse_rover_datagram
-from gateway.transport import SimulatedSerialTransport
+from gateway.tcp_transport import LanderTCPTransport
 
 
 class BroadcasterStub:
@@ -14,24 +14,24 @@ class BroadcasterStub:
 
 
 def test_parse_valid_rover_udp_packet():
-    parsed = parse_rover_datagram(b"DIST:145,PITCH:2.5,ROLL:-1.0,CMD:F,MODE:M,VOLT:11.8")
+    parsed = parse_rover_datagram(b"DIST:145,PITCH:2.5,ROLL:-1.0,CMD:F,MODE:M")
     assert parsed == {
         "distance_cm": 145.0,
         "pitch_deg": 2.5,
         "roll_deg": -1.0,
         "command": "F",
         "mode": "M",
-        "battery_voltage_v": 11.8,
     }
 
 
 @pytest.mark.parametrize("packet", [
     b"garbage",
-    b"DIST:12,PITCH:0,ROLL:0,CMD:X,MODE:M,VOLT:11.7",
-    b"DIST:12,PITCH:0,ROLL:0,CMD:S,MODE:X,VOLT:11.7",
-    b"DIST:12,PITCH:nope,ROLL:0,CMD:S,MODE:A,VOLT:11.7",
-    b"DIST:12,PITCH:0,CMD:S,MODE:A,VOLT:11.7",
-    b"DIST:NaN,PITCH:0,ROLL:0,CMD:S,MODE:A,VOLT:11.7",
+    b"DIST:12,PITCH:0,ROLL:0,CMD:X,MODE:M",
+    b"DIST:12,PITCH:0,ROLL:0,CMD:S,MODE:X",
+    b"DIST:12,PITCH:nope,ROLL:0,CMD:S,MODE:A",
+    b"DIST:12,PITCH:0,CMD:S,MODE:A",
+    b"DIST:NaN,PITCH:0,ROLL:0,CMD:S,MODE:A",
+    b"DIST:12,PITCH:0,ROLL:0,CMD:S,MODE:A,VOLT:11.7",
 ])
 def test_malformed_or_invalid_packet_rejected(packet):
     with pytest.raises(ValueError):
@@ -41,7 +41,7 @@ def test_malformed_or_invalid_packet_rejected(packet):
 def test_invalid_packet_does_not_overwrite_valid_state(monkeypatch):
     config = GatewayConfig(rover_offline_timeout_s=2.0)
     protocol = RoverUDPProtocol(config, BroadcasterStub())
-    protocol.datagram_received(b"DIST:12,PITCH:0,ROLL:0,CMD:S,MODE:A,VOLT:11.7", ("127.0.0.1", 1))
+    protocol.datagram_received(b"DIST:12,PITCH:0,ROLL:0,CMD:S,MODE:A", ("127.0.0.1", 1))
     valid = protocol.status()
     protocol.datagram_received(b"DIST:broken", ("127.0.0.1", 1))
     assert protocol.status() == valid
@@ -52,7 +52,7 @@ def test_rover_status_transitions_offline_when_packet_is_stale(monkeypatch):
 
     config = GatewayConfig(rover_offline_timeout_s=2.0)
     protocol = RoverUDPProtocol(config, BroadcasterStub())
-    protocol.datagram_received(b"DIST:12,PITCH:0,ROLL:0,CMD:S,MODE:A,VOLT:11.7", ("127.0.0.1", 1))
+    protocol.datagram_received(b"DIST:12,PITCH:0,ROLL:0,CMD:S,MODE:A", ("127.0.0.1", 1))
     monkeypatch.setattr(rover_udp.time, "monotonic", lambda: protocol._last_seen_mono + 3.0)
     status = protocol.status()
     assert status["connection_state"] == "OFFLINE"
@@ -65,9 +65,9 @@ def test_gateway_rover_status_api_uses_udp_receiver_without_real_serial():
 
     app = create_gateway_app(
         config=GatewayConfig(rover_udp_host="127.0.0.1", rover_udp_port=0),
-        transport=SimulatedSerialTransport(),
+        transport=LanderTCPTransport("127.0.0.1", 0),
     )
-    route = next(route for route in app.routes if getattr(route, "path", None) == "/api/rover/status")
+    route = next(route for route in app.routes[-1].original_router.routes if getattr(route, "path", None) == "/api/rover/status")
     status = asyncio.run(route.endpoint())
     assert status["rover_id"] == "mars-rover-01"
     assert status["connection_state"] == "OFFLINE"
@@ -80,19 +80,19 @@ def test_gateway_status_api_returns_latest_valid_udp_sample_and_stales_it(monkey
 
     app = create_gateway_app(
         config=GatewayConfig(rover_udp_host="127.0.0.1", rover_udp_port=5005, rover_offline_timeout_s=2.0),
-        transport=SimulatedSerialTransport(),
+        transport=LanderTCPTransport("127.0.0.1", 0),
     )
     receiver = app.state.rover_receiver
-    route = next(route for route in app.routes if getattr(route, "path", None) == "/api/rover/status")
+    route = next(route for route in app.routes[-1].original_router.routes if getattr(route, "path", None) == "/api/rover/status")
     receiver.protocol.datagram_received(
-        b"DIST:12,PITCH:0.0,ROLL:0.5,CMD:S,MODE:A,VOLT:11.7",
+        b"DIST:12,PITCH:0.0,ROLL:0.5,CMD:S,MODE:A",
         ("127.0.0.1", 5005),
     )
     online = asyncio.run(route.endpoint())
     assert online["connection_state"] == "ONLINE"
     assert online["distance_cm"] == 12.0
     assert online["mode"] == "A"
-    assert online["battery_voltage_v"] == 11.7
+    assert "battery_voltage_v" not in online
 
     last_seen = receiver.protocol._last_seen_mono
     monkeypatch.setattr(rover_udp.time, "monotonic", lambda: last_seen + 3.0)
@@ -102,8 +102,8 @@ def test_gateway_status_api_returns_latest_valid_udp_sample_and_stales_it(monkey
 
 
 @pytest.mark.anyio
-async def test_gateway_lifespan_starts_rover_receiver_with_lander_gateway(monkeypatch):
-    app = create_gateway_app(transport=SimulatedSerialTransport())
+async def test_gateway_lifespan_starts_lander_tcp_and_rover_receiver(monkeypatch):
+    app = create_gateway_app(transport=LanderTCPTransport("127.0.0.1", 0))
     started = {"lander": False, "rover": False}
     stopped = {"lander": False, "rover": False}
 
@@ -119,8 +119,8 @@ async def test_gateway_lifespan_starts_rover_receiver_with_lander_gateway(monkey
     async def stop_rover():
         stopped["rover"] = True
 
-    monkeypatch.setattr(app.state.serial_manager, "start", start_lander)
-    monkeypatch.setattr(app.state.serial_manager, "stop", stop_lander)
+    monkeypatch.setattr(app.state.lander_manager, "start", start_lander)
+    monkeypatch.setattr(app.state.lander_manager, "stop", stop_lander)
     monkeypatch.setattr(app.state.rover_receiver, "start", start_rover)
     monkeypatch.setattr(app.state.rover_receiver, "stop", stop_rover)
 

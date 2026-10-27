@@ -18,7 +18,7 @@ def test_rover_simulator_initializes_and_updates_bounded_telemetry():
     sample = simulator.step(datetime(2026, 10, 23, tzinfo=timezone.utc))
     assert sample.connection_state == RoverConnectionState.ONLINE
     assert sample.distance_cm == 144.7
-    assert sample.battery_percentage is None
+    assert "battery_percentage" not in sample.model_dump()
     assert sample.source == RoverSource.SIMULATOR
     assert -90 <= sample.pitch_deg <= 90
     assert -90 <= sample.roll_deg <= 90

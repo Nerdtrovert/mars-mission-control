@@ -1,8 +1,7 @@
-"""Serial Manager for Raspberry Pi Gateway.
+"""Lander network manager for the Raspberry Pi gateway.
 
-Manages USB serial connection to ESP32, framed JSON line reading/writing,
-ESP32 boot ROM text filtering, connection health lifecycle, RequestIdMapper correlation,
-and live telemetry broadcasting.
+Manages the ESP32's Wi-Fi TCP stream, newline-delimited JSON, connection health,
+command correlation, and live telemetry broadcasting.
 """
 
 from __future__ import annotations
@@ -20,27 +19,27 @@ from app.communication.gateway_contract import (
     CommandResponse,
     ConnectionState,
     DeviceInfo,
-    GateState,
     GatewayDevicesResponse,
     GatewayHealthResponse,
     LanderStatusResponse,
     OperatingMode,
 )
 from app.communication.request_mapper import RequestIdMapper
+from app.telemetry.processor import TelemetryError, parse_telemetry
 from gateway.config import GatewayConfig
-from gateway.transport import SerialTransport
+from gateway.tcp_transport import LanderTCPTransport
 from gateway.ws_manager import WebSocketBroadcaster
 
 logger = logging.getLogger(__name__)
 
 
-class SerialManager:
-    """Coordinates serial I/O, device state tracking, command correlation, and telemetry broadcast."""
+class LanderManager:
+    """Coordinates lander TCP I/O, device state, command correlation, and telemetry broadcast."""
 
     def __init__(
         self,
         config: GatewayConfig,
-        transport: SerialTransport,
+        transport: LanderTCPTransport,
         ws_broadcaster: Optional[WebSocketBroadcaster] = None,
     ) -> None:
         self.config = config
@@ -57,26 +56,20 @@ class SerialManager:
         self._last_seen_timestamp: Optional[float] = None
         self._last_seen_iso: Optional[str] = None
 
-        # Cached lander status fields
+        # Cached lander status fields (no stale defaults; None until validated from status)
         self._timestamp_ms: Optional[int] = None
         self._mode: Optional[OperatingMode] = None
-        self._gate_state: GateState = GateState.UNKNOWN
-        self._closed_limit: bool = False
-        self._open_limit: bool = False
-        self._fault: Optional[str] = None
-        self._pending_standby: Optional[bool] = None
-        self._startup_limits_settled: Optional[bool] = None
-        self._limits_established: Optional[bool] = None
         self._sensors_polling: Optional[bool] = False
         self._bmp280_ok: Optional[bool] = None
         self._dht11_ok: Optional[bool] = None
         self._bmp280_state: Optional[str] = None
         self._dht11_state: Optional[str] = None
-        self._firmware: Optional[str] = "1.3.1"
+        self._firmware: Optional[str] = None
 
         # Concurrency & Command waiting
         self._write_lock = asyncio.Lock()
         self._pending_commands: dict[int, asyncio.Future[dict[str, Any]]] = {}
+        self._valid_message_event = asyncio.Event()
 
         # Background tasks
         self._reader_task: Optional[asyncio.Task] = None
@@ -91,12 +84,8 @@ class SerialManager:
     def device_state(self) -> ConnectionState:
         return self._device_state
 
-    @property
-    def gate_state(self) -> GateState:
-        return self._gate_state
-
     async def start(self) -> None:
-        """Start the serial transport and background worker loops."""
+        """Start the TCP listener and background worker loops."""
         if self._running:
             return
 
@@ -106,20 +95,17 @@ class SerialManager:
 
         try:
             await self.transport.open()
-            self._device_state = ConnectionState.ONLINE
-            # Immediately request device status upon initial connection
-            await self._query_fresh_status()
         except Exception as e:
-            logger.warning(f"Initial serial transport open failed: {e}. Will retry in background.")
+            logger.warning("Initial lander TCP listener start failed: %s. Will retry in background.", e)
             self._device_state = ConnectionState.NOT_CONNECTED
             self._invalidate_cached_hardware_state()
 
-        self._reader_task = asyncio.create_task(self._reader_loop(), name="serial_reader_loop")
-        self._staleness_task = asyncio.create_task(self._staleness_loop(), name="serial_staleness_loop")
-        logger.info("SerialManager started successfully.")
+        self._reader_task = asyncio.create_task(self._reader_loop(), name="lander_reader_loop")
+        self._staleness_task = asyncio.create_task(self._staleness_loop(), name="lander_staleness_loop")
+        logger.info("LanderManager started successfully.")
 
     async def stop(self) -> None:
-        """Cleanly stop background loops and close the serial transport."""
+        """Cleanly stop background loops and close the TCP listener."""
         if not self._running:
             return
 
@@ -141,7 +127,7 @@ class SerialManager:
                 pass
             self._staleness_task = None
 
-        # Fail any pending commands
+        # Fail any pending commands promptly
         for req_id, fut in list(self._pending_commands.items()):
             if not fut.done():
                 fut.set_result({"accepted": False, "reason": "GATEWAY_SHUTDOWN"})
@@ -150,67 +136,54 @@ class SerialManager:
         try:
             await self.transport.close()
         except Exception as e:
-            logger.warning(f"Error closing serial transport on stop: {e}")
+            logger.warning("Error closing lander TCP listener on stop: %s", e)
 
         self._device_state = ConnectionState.NOT_CONNECTED
         self._invalidate_cached_hardware_state()
-        logger.info("SerialManager stopped cleanly.")
+        logger.info("LanderManager stopped cleanly.")
 
     def _invalidate_cached_hardware_state(self) -> None:
-        """
-        Safety invariant: when disconnected, never assume physical gate state.
-        Strictly revert to UNKNOWN with both limit switch readings false.
-        """
-        self._gate_state = GateState.UNKNOWN
-        self._closed_limit = False
-        self._open_limit = False
+        """Clear cached device and sensor state after disconnect or offline timeout."""
         self._mode = None
         self._timestamp_ms = None
-        self._fault = None
         self._sensors_polling = False
         self._bmp280_ok = None
         self._dht11_ok = None
         self._bmp280_state = None
         self._dht11_state = None
+        self._firmware = None
 
     async def _query_fresh_status(self) -> None:
         """
         Query device status snapshot via GET_STATUS.
-        Strictly non-movement recovery query.
+        Strictly non-movement recovery query. Permitted whenever the TCP link is open.
         """
         if not self.transport.is_open():
             return
 
-        req_id = self.mapper.allocate("reconnect-sync-status")
+        cmd = CommandRequest(
+            command_id=f"reconnect-sync-{int(time.time() * 1000)}",
+            command=CommandName.GET_STATUS,
+        )
         try:
-            cmd_payload = json.dumps({"command": CommandName.GET_STATUS.value, "request_id": req_id})
-            async with self._write_lock:
-                await self.transport.write_line(cmd_payload)
+            await self.send_command(cmd)
         except Exception as e:
-            logger.warning(f"Failed to transmit status query: {e}")
-        finally:
-            self.mapper.mark_completed("reconnect-sync-status")
+            logger.warning("Failed to execute reconnect status query: %s", e)
 
     async def _reader_loop(self) -> None:
-        """Background continuous reading loop with JSON framing & reconnect logic."""
+        """Continuously read framed JSON and wait for Wi-Fi reconnections."""
         while self._running:
+            current_conn = self.transport.current_conn_id
             try:
-                if not self.transport.is_open():
-                    # Handle disconnect / reconnect cycle
-                    self._handle_disconnect()
-                    await asyncio.sleep(self.config.reconnect_delay_s)
+                if self.transport.server is None:
                     try:
                         await self.transport.open()
-                    except Exception:
+                    except Exception as e:
+                        logger.warning("Failed to open lander TCP listener: %s", e)
+                        await asyncio.sleep(self.config.reconnect_delay_s)
                         continue
 
-                # If connection was restored, synchronize state and query status
-                if self._device_state in (ConnectionState.OFFLINE, ConnectionState.NOT_CONNECTED) and self.transport.is_open():
-                    logger.info("Serial transport reconnected successfully.")
-                    self._device_state = ConnectionState.ONLINE
-                    await self._query_fresh_status()
-
-                # Read line from transport
+                # Read line from transport (waits up to timeout for a client or data)
                 line = await self.transport.read_line(timeout=0.1)
                 if line is None:
                     continue
@@ -223,24 +196,30 @@ class SerialManager:
                 await self._process_raw_line(line_str)
 
             except (ConnectionError, OSError) as e:
-                logger.warning(f"Serial read error: {e}")
+                logger.warning("Lander TCP stream error: %s", e)
                 try:
-                    await self.transport.close()
+                    await self.transport.disconnect_client(conn_id=current_conn)
                 except Exception:
                     pass
-                self._handle_disconnect()
-                await asyncio.sleep(self.config.reconnect_delay_s)
+                self._handle_disconnect(conn_id=current_conn)
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Unexpected error in serial reader loop: {e}", exc_info=True)
+                logger.error("Unexpected error in lander TCP reader loop: %s", e, exc_info=True)
                 await asyncio.sleep(0.1)
 
-    def _handle_disconnect(self) -> None:
-        """Handle link loss: mark OFFLINE, invalidate gate state, fail pending commands."""
-        if self._device_state != ConnectionState.OFFLINE:
-            logger.warning("ESP32 serial connection lost. Transitioning device to OFFLINE.")
-            self._device_state = ConnectionState.OFFLINE
+    def _handle_disconnect(self, conn_id: Optional[int] = None) -> None:
+        """Handle link loss: mark OFFLINE, clear cached device state, fail pending commands."""
+        # If a newer connection has already taken over, do not invalidate state
+        if conn_id is not None and self.transport.current_conn_id != conn_id:
+            return
+
+        if self._device_state not in (ConnectionState.OFFLINE, ConnectionState.NOT_CONNECTED):
+            logger.warning("ESP32 Wi-Fi connection lost.")
+            self._device_state = (
+                ConnectionState.OFFLINE if self._last_seen_timestamp is not None
+                else ConnectionState.NOT_CONNECTED
+            )
             self._invalidate_cached_hardware_state()
 
             # Reject all pending command futures immediately
@@ -250,54 +229,111 @@ class SerialManager:
             self._pending_commands.clear()
 
     async def _process_raw_line(self, line: str) -> None:
-        """
-        Parses JSON line. Filters out ESP32 boot/ROM text without crashing.
-        Routes telemetry, command_ack, status, and gate_status events.
-        """
+        """Validates JSON messages before refreshing liveness or broadcasting them."""
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
-            # Filter non-JSON text (e.g. ESP32 ROM boot text, garbage bytes)
-            logger.debug(f"Discarding non-JSON serial line: {line}")
+            logger.debug("Discarding malformed lander JSON message")
             return
 
         if not isinstance(payload, dict):
             return
 
-        # Verified JSON packet received from ESP32: update liveness metrics
+        # Explicitly reject messages with retired actuator fields
+        if {"gate_state", "closed_limit", "open_limit", "fault"} & payload.keys():
+            logger.warning("Discarding message with retired actuator fields")
+            return
+
+        msg_type = payload.get("type")
+        if msg_type == "telemetry":
+            try:
+                parse_telemetry(line)
+            except TelemetryError as exc:
+                logger.warning("Discarding invalid lander telemetry: %s", exc)
+                return
+
+        elif msg_type == "status":
+            required = {"timestamp_ms", "mode", "sensors_polling", "bmp280_ok", "dht11_ok"}
+            if not required.issubset(payload):
+                return
+            ts = payload.get("timestamp_ms")
+            if isinstance(ts, bool) or not isinstance(ts, int) or ts < 0:
+                return
+            if payload.get("mode") not in (OperatingMode.ACTIVE.value, OperatingMode.STANDBY.value):
+                return
+            if not isinstance(payload.get("sensors_polling"), bool):
+                return
+            if not isinstance(payload.get("bmp280_ok"), bool):
+                return
+            if not isinstance(payload.get("dht11_ok"), bool):
+                return
+            if "bmp280_state" in payload and payload["bmp280_state"] is not None and not isinstance(payload["bmp280_state"], str):
+                return
+            if "dht11_state" in payload and payload["dht11_state"] is not None and not isinstance(payload["dht11_state"], str):
+                return
+            if "firmware" in payload and payload["firmware"] is not None and not isinstance(payload["firmware"], str):
+                return
+            if "request_id" in payload and payload["request_id"] is not None:
+                req_id = payload["request_id"]
+                if isinstance(req_id, bool) or not isinstance(req_id, int) or req_id < 0:
+                    return
+
+        elif msg_type == "mode_status":
+            if payload.get("mode") not in (OperatingMode.ACTIVE.value, OperatingMode.STANDBY.value):
+                return
+            if "request_id" in payload and payload["request_id"] is not None:
+                req_id = payload["request_id"]
+                if isinstance(req_id, bool) or not isinstance(req_id, int) or req_id < 0:
+                    return
+
+        elif msg_type == "command_ack":
+            if not isinstance(payload.get("accepted"), bool):
+                return
+            if "request_id" in payload and payload["request_id"] is not None:
+                req_id = payload["request_id"]
+                if isinstance(req_id, bool) or not isinstance(req_id, int) or req_id < 0:
+                    return
+            if "reason" in payload and payload["reason"] is not None and not isinstance(payload["reason"], str):
+                return
+
+        else:
+            return
+
+        # Only validated device messages refresh liveness metrics.
         now = time.time()
         self._last_seen_timestamp = now
         self._last_seen_iso = datetime.now(timezone.utc).isoformat()
+        self._valid_message_event.set()
         if self._device_state != ConnectionState.ONLINE:
             self._device_state = ConnectionState.ONLINE
-
-        msg_type = payload.get("type")
 
         # 1. Command Acknowledgement
         if msg_type == "command_ack":
             req_id = payload.get("request_id")
             if req_id is not None and req_id in self._pending_commands:
-                fut = self._pending_commands.pop(req_id)
-                if not fut.done():
+                fut = self._pending_commands.get(req_id)
+                if fut is not None and not fut.done():
                     fut.set_result(payload)
 
-        # 2. Status Snapshot (response to GET_STATUS)
+        # 2. Status Snapshot (response to GET_STATUS or on-connect status)
         elif msg_type == "status":
             self._update_from_status(payload)
             req_id = payload.get("request_id")
             if req_id is not None and req_id in self._pending_commands:
-                fut = self._pending_commands.pop(req_id)
-                if not fut.done():
-                    fut.set_result({"accepted": True, "reason": None, "fault": payload.get("fault")})
+                fut = self._pending_commands.get(req_id)
+                if fut is not None and not fut.done():
+                    fut.set_result({"accepted": True, "reason": None})
 
-        # 3. Periodic Telemetry (approx 1 Hz in ACTIVE mode)
-        elif msg_type == "telemetry":
-            self._update_from_telemetry(payload)
+        # 3. Mode Status Update
+        elif msg_type == "mode_status":
+            mode_val = payload.get("mode")
+            if mode_val in (OperatingMode.ACTIVE.value, OperatingMode.STANDBY.value):
+                self._mode = OperatingMode(mode_val)
             await self.ws_broadcaster.broadcast(payload)
 
-        # 4. Gate Status Transition Event
-        elif msg_type == "gate_status":
-            self._update_from_gate_status(payload)
+        # 4. Periodic Telemetry (approx 1 Hz in ACTIVE mode)
+        elif msg_type == "telemetry":
+            self._update_from_telemetry(payload)
             await self.ws_broadcaster.broadcast(payload)
 
     def _update_from_telemetry(self, payload: dict[str, Any]) -> None:
@@ -307,13 +343,6 @@ class SerialManager:
         if mode_val in (OperatingMode.ACTIVE.value, OperatingMode.STANDBY.value):
             self._mode = OperatingMode(mode_val)
 
-        gate_val = payload.get("gate_state")
-        if gate_val in [g.value for g in GateState]:
-            self._gate_state = GateState(gate_val)
-
-        self._closed_limit = bool(payload.get("closed_limit", False))
-        self._open_limit = bool(payload.get("open_limit", False))
-        self._fault = payload.get("fault")
         self._sensors_polling = True
         self._bmp280_ok = payload.get("bmp280_ok")
         self._dht11_ok = payload.get("dht11_ok")
@@ -329,19 +358,6 @@ class SerialManager:
         elif self._dht11_ok is False and self._dht11_state != "NO_DATA":
             self._dht11_state = "FAILED"
 
-    def _update_from_gate_status(self, payload: dict[str, Any]) -> None:
-        """Update cached state from asynchronous gate movement / fault event."""
-        state_val = payload.get("state")
-        if state_val in [g.value for g in GateState]:
-            self._gate_state = GateState(state_val)
-
-        if "fault" in payload:
-            self._fault = payload.get("fault")
-        if "closed_limit" in payload:
-            self._closed_limit = bool(payload.get("closed_limit"))
-        if "open_limit" in payload:
-            self._open_limit = bool(payload.get("open_limit"))
-
     def _update_from_status(self, payload: dict[str, Any]) -> None:
         """Update cached state from GET_STATUS full snapshot."""
         self._timestamp_ms = payload.get("timestamp_ms")
@@ -349,62 +365,54 @@ class SerialManager:
         if mode_val in (OperatingMode.ACTIVE.value, OperatingMode.STANDBY.value):
             self._mode = OperatingMode(mode_val)
 
-        gate_val = payload.get("gate_state")
-        if gate_val in [g.value for g in GateState]:
-            self._gate_state = GateState(gate_val)
-
-        self._closed_limit = bool(payload.get("closed_limit", False))
-        self._open_limit = bool(payload.get("open_limit", False))
-        self._fault = payload.get("fault")
-        self._pending_standby = payload.get("pending_standby")
-        self._startup_limits_settled = payload.get("startup_limits_settled")
-        self._limits_established = payload.get("limits_established")
         self._sensors_polling = payload.get("sensors_polling", False)
         self._bmp280_ok = payload.get("bmp280_ok")
         self._dht11_ok = payload.get("dht11_ok")
         self._bmp280_state = payload.get("bmp280_state")
         self._dht11_state = payload.get("dht11_state")
-        self._firmware = payload.get("firmware", "1.3.1")
+        self._firmware = payload.get("firmware")
 
     async def _staleness_loop(self) -> None:
         """Periodic evaluation of telemetry and communication staleness."""
         while self._running:
             try:
                 await asyncio.sleep(0.5)
-                if self._last_seen_timestamp is None:
-                    continue
-
-                elapsed = time.time() - self._last_seen_timestamp
-
-                if elapsed > self.config.offline_timeout_s:
-                    if self._device_state != ConnectionState.OFFLINE:
-                        logger.warning(f"Lander silence ({elapsed:.1f}s) exceeded offline timeout. Marking OFFLINE.")
-                        self._device_state = ConnectionState.OFFLINE
-                        self._invalidate_cached_hardware_state()
-                elif elapsed > self.config.stale_timeout_s:
-                    if self._device_state == ConnectionState.ONLINE:
-                        logger.info(f"Lander silence ({elapsed:.1f}s) exceeded stale threshold. Marking STALE.")
-                        self._device_state = ConnectionState.STALE
+                self._evaluate_staleness()
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in staleness loop: {e}", exc_info=True)
+                logger.error("Error in staleness loop: %s", e, exc_info=True)
+
+    def _evaluate_staleness(self, now: Optional[float] = None) -> None:
+        """Apply receipt-time thresholds without treating gateway health as device health."""
+        if self._last_seen_timestamp is None:
+            return
+        elapsed = (time.time() if now is None else now) - self._last_seen_timestamp
+        if elapsed > self.config.offline_timeout_s:
+            if self._device_state != ConnectionState.OFFLINE:
+                logger.warning("Lander telemetry silence exceeded offline timeout.")
+                self._device_state = ConnectionState.OFFLINE
+                self._invalidate_cached_hardware_state()
+        elif elapsed > self.config.stale_timeout_s and self._device_state == ConnectionState.ONLINE:
+            self._device_state = ConnectionState.STALE
 
     async def send_command(self, cmd_req: CommandRequest) -> CommandResponse:
         """
-        Submit a command for transmission across the serial link.
+        Submit a status or operating-mode command across the TCP stream.
         Allocates integer request_id, writes JSON, and awaits correlated ACK.
+        GET_STATUS is permitted as a synchronization query whenever the TCP link is open.
+        Operating mode changes (SET_ACTIVE, SET_STANDBY) require the device to be ONLINE.
         """
         now_iso = datetime.now(timezone.utc).isoformat()
+        is_open = self.transport.is_open()
+        is_online = self._device_state == ConnectionState.ONLINE
 
-        # Reject if device is not currently ONLINE
-        if self._device_state != ConnectionState.ONLINE:
+        if not is_open or (cmd_req.command != CommandName.GET_STATUS and not is_online):
             return CommandResponse(
                 command_id=cmd_req.command_id,
                 accepted=False,
                 reason="DEVICE_OFFLINE",
-                fault=None,
                 timestamp=now_iso,
             )
 
@@ -425,45 +433,42 @@ class SerialManager:
                 command_id=cmd_req.command_id,
                 accepted=bool(ack.get("accepted", False)),
                 reason=ack.get("reason"),
-                fault=ack.get("fault"),
                 timestamp=datetime.now(timezone.utc).isoformat(),
             )
         except asyncio.TimeoutError:
-            self._pending_commands.pop(req_id, None)
             return CommandResponse(
                 command_id=cmd_req.command_id,
                 accepted=False,
                 reason="DEVICE_TIMEOUT",
-                fault=None,
                 timestamp=datetime.now(timezone.utc).isoformat(),
             )
         except (ConnectionError, OSError) as e:
-            self._pending_commands.pop(req_id, None)
-            logger.warning(f"Failed to write command to serial transport: {e}")
-            self._handle_disconnect()
+            logger.warning("Failed to write command to lander TCP stream: %s", e)
             try:
-                await self.transport.close()
+                await self.transport.disconnect_client()
             except Exception:
                 pass
+            self._handle_disconnect()
             return CommandResponse(
                 command_id=cmd_req.command_id,
                 accepted=False,
                 reason="DEVICE_WRITE_ERROR",
-                fault=None,
                 timestamp=datetime.now(timezone.utc).isoformat(),
             )
         finally:
+            fut = self._pending_commands.pop(req_id, None)
+            if fut is not None and not fut.done():
+                fut.cancel()
             self.mapper.mark_completed(cmd_req.command_id)
 
     def get_health(self) -> GatewayHealthResponse:
         """GET /health response."""
         uptime = max(0.0, time.time() - self._start_time)
         return GatewayHealthResponse(
-            status="healthy" if self._device_state == ConnectionState.ONLINE else "degraded",
+            status="healthy" if self._gateway_state == ConnectionState.ONLINE else "unhealthy",
             connection_state=self._gateway_state,
             version=self.config.version,
             uptime_seconds=round(uptime, 2),
-            serial_port=self.config.serial_port,
             device_connected=(self._device_state == ConnectionState.ONLINE),
         )
 
@@ -472,7 +477,6 @@ class SerialManager:
         device = DeviceInfo(
             device_id=self.config.device_id,
             name=self.config.device_name,
-            port=self.config.serial_port,
             connection_state=self._device_state,
             firmware_version=self._firmware,
             last_seen_at=self._last_seen_iso,
@@ -481,24 +485,17 @@ class SerialManager:
 
     def get_lander_status(self) -> LanderStatusResponse:
         """GET /api/lander/status response."""
-        if self._device_state != ConnectionState.ONLINE:
+        if self._device_state not in (ConnectionState.ONLINE, ConnectionState.STALE):
             return LanderStatusResponse(
                 gateway_state=self._gateway_state,
                 device_state=self._device_state,
                 timestamp_ms=None,
                 mode=None,
-                gate_state=GateState.UNKNOWN,
-                closed_limit=False,
-                open_limit=False,
-                fault=None,
-                pending_standby=None,
-                startup_limits_settled=None,
-                limits_established=None,
                 sensors_polling=False,
                 bmp280_ok=None,
                 dht11_ok=None,
-                bmp280_state="FAILED",
-                dht11_state="FAILED",
+                bmp280_state="NO_DATA",
+                dht11_state="NO_DATA",
                 firmware=None,
             )
 
@@ -518,13 +515,6 @@ class SerialManager:
             device_state=self._device_state,
             timestamp_ms=self._timestamp_ms,
             mode=self._mode,
-            gate_state=self._gate_state,
-            closed_limit=self._closed_limit,
-            open_limit=self._open_limit,
-            fault=self._fault,
-            pending_standby=self._pending_standby,
-            startup_limits_settled=self._startup_limits_settled,
-            limits_established=self._limits_established,
             sensors_polling=self._sensors_polling,
             bmp280_ok=self._bmp280_ok,
             dht11_ok=self._dht11_ok,

@@ -14,7 +14,7 @@
       <div class="mars-badge">MMC-1</div>
       <div class="title-group">
         <h1>MARS MISSION CONTROL</h1>
-        <p>AEROSPACE EXHIBITION • RED PLANET SURFACE GATE CONTROLLER</p>
+        <p>AEROSPACE EXHIBITION • LANDER & ROVER TELEMETRY</p>
       </div>
     </div>
 
@@ -53,52 +53,27 @@
   <!-- Main Dashboard Grid Layout -->
   <main class="dashboard-grid">
 
-    <!-- Card 1: Gate Actuator & Safety Controls -->
-    <section class="card gate-hero">
+    <!-- Lander operating mode and non-actuating status query -->
+    <section class="card lander-status-card">
       <div class="card-header">
-        <h2 class="card-title">PHYSICAL LANDER GATE</h2>
-        <span id="gate-mode-tag" style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">GROUND TRUTH</span>
+        <h2 class="card-title">LANDER SYSTEM STATUS</h2>
+        <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">ESP32</span>
       </div>
-
-      <div id="gate-state-display" class="gate-state-indicator gate-state-unknown">
-        UNKNOWN
-      </div>
-
-      <div class="limit-switches-grid">
-        <div class="limit-item">
-          <span class="limit-label">OPEN LIMIT</span>
-          <span id="limit-open-led" class="limit-led"></span>
-        </div>
-        <div class="limit-item">
-          <span class="limit-label">CLOSED LIMIT</span>
-          <span id="limit-closed-led" class="limit-led"></span>
-        </div>
-      </div>
-
-      <div id="fault-box" class="fault-alert-box hidden">
-        <strong>HARDWARE FAULT LATCHED:</strong>
-        <span id="fault-code-text">NONE</span>
-        <div style="font-size: 0.75rem; margin-top: 0.25rem; color: #fca5a5;">
-          Movement commands inhibited until fault cleared and verified.
-        </div>
-      </div>
+      <div id="lander-mode-display" class="lander-mode-indicator">UNKNOWN</div>
+      <div class="control-notice">Lander operating mode and sensor status.</div>
 
       <div class="controls-grid">
-        <button id="btn-open-gate" class="btn btn-open" disabled>
-          DEPLOY / OPEN GATE
-        </button>
-        <button id="btn-close-gate" class="btn btn-close" disabled>
-          RETRACT / CLOSE GATE
-        </button>
         <button id="btn-get-status" class="btn btn-secondary">
           QUERY STATUS
         </button>
+        <button id="btn-set-active" class="btn btn-primary">SET ACTIVE</button>
+        <button id="btn-set-standby" class="btn btn-mode-secondary">SET STANDBY</button>
         <button id="btn-reset-session" class="btn btn-danger">
           RESET SESSION
         </button>
       </div>
 
-      <div id="control-safety-notice" class="control-notice">
+      <div id="control-status-notice" class="control-notice">
         Verifying safety interlocks and hardware telemetry...
       </div>
     </section>
@@ -197,11 +172,8 @@
         <div class="metric-box"><span class="metric-name">PITCH / ROLL</span><div class="metric-value"><span id="rover-attitude">-- / --</span><span class="metric-unit">°</span></div></div>
         <div class="metric-box"><span class="metric-name">REPORTED CMD</span><div class="metric-value"><span id="rover-command">--</span></div></div>
         <div class="metric-box"><span class="metric-name">DRIVE MODE</span><div class="metric-value"><span id="rover-mode">--</span></div></div>
-        <div class="metric-box"><span class="metric-name">BATTERY VOLTAGE</span><div class="metric-value"><span id="rover-voltage">--</span><span class="metric-unit">V</span></div></div>
-        <div class="metric-box"><span class="metric-name">BATTERY CAPACITY</span><div class="metric-value"><span id="rover-battery-pct">--</span><span class="metric-unit">%</span></div></div>
       </div>
       <div id="rover-event" class="rover-event">Waiting for rover telemetry.</div>
-      <div class="rover-footnote">Battery percentage unavailable until a validated 3S LiPo mapping is established.</div>
     </section>
 
     <!-- Card 3: Command Lifecycle Audit Log -->
@@ -223,7 +195,7 @@
               <th>Req ID</th>
               <th>Created</th>
               <th>Ack / Accepted</th>
-              <th>Outcome / Limit Switch Reason</th>
+              <th>Outcome</th>
             </tr>
           </thead>
           <tbody id="commands-audit-tbody">

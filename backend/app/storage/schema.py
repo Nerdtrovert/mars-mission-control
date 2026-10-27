@@ -7,16 +7,12 @@ CREATE TABLE IF NOT EXISTS telemetry (
     received_at_epoch REAL NOT NULL,
     timestamp_ms INTEGER NOT NULL,
     mode TEXT NOT NULL,
-    gate_state TEXT NOT NULL,
-    closed_limit INTEGER NOT NULL,
-    open_limit INTEGER NOT NULL,
     bmp_temperature_c REAL,
     pressure_hpa REAL,
     dht_temperature_c REAL,
     humidity_pct REAL,
     bmp280_ok INTEGER,
-    dht11_ok INTEGER,
-    fault TEXT
+    dht11_ok INTEGER
 );
 """
 

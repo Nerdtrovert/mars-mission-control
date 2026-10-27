@@ -18,7 +18,6 @@ from app.communication.gateway_contract import (
     CommandRequest,
     CommandResponse,
     ConnectionState,
-    GateState,
     GatewayHealthResponse,
     LanderStatusResponse,
 )
@@ -95,7 +94,6 @@ class GatewayClient:
                     connection_state=ConnectionState.OFFLINE,
                     version="unknown",
                     uptime_seconds=0.0,
-                    serial_port=None,
                     device_connected=False,
                 )
         else:
@@ -104,7 +102,6 @@ class GatewayClient:
                 connection_state=ConnectionState.NOT_CONNECTED,
                 version="unknown",
                 uptime_seconds=0.0,
-                serial_port=None,
                 device_connected=False,
             )
 
@@ -127,17 +124,11 @@ class GatewayClient:
                 resp = LanderStatusResponse(
                     gateway_state=ConnectionState.OFFLINE,
                     device_state=ConnectionState.OFFLINE,
-                    gate_state=GateState.UNKNOWN,
-                    closed_limit=False,
-                    open_limit=False,
                 )
         else:
             resp = LanderStatusResponse(
                 gateway_state=ConnectionState.NOT_CONNECTED,
                 device_state=ConnectionState.NOT_CONNECTED,
-                gate_state=GateState.UNKNOWN,
-                closed_limit=False,
-                open_limit=False,
             )
 
         self.state_manager.update_gateway_health(resp.gateway_state.value)
@@ -146,20 +137,10 @@ class GatewayClient:
         if resp.device_state == ConnectionState.ONLINE:
             self.state_manager.update_from_device_status({
                 "mode": resp.mode.value if resp.mode else "ACTIVE",
-                "gate_state": resp.gate_state.value,
-                "closed_limit": resp.closed_limit,
-                "open_limit": resp.open_limit,
-                "fault": resp.fault,
                 "timestamp_ms": resp.timestamp_ms,
                 "bmp280_ok": resp.bmp280_ok,
                 "dht11_ok": resp.dht11_ok,
             })
-            # Reconcile any uncertain/timed-out movement commands with the verified status
-            self.command_tracker.reconcile_with_status_response(
-                gate_state=resp.gate_state,
-                closed_limit=resp.closed_limit,
-                open_limit=resp.open_limit,
-            )
 
         return resp
 
@@ -170,14 +151,12 @@ class GatewayClient:
         snapshot = self.state_manager.snapshot()
         gw_state = ConnectionState(snapshot["gateway_state"])
         dev_state = ConnectionState(snapshot["device_state"])
-        gate_st = GateState(snapshot["gate_state"])
 
         # 1. Pre-dispatch safety invariants check
         self.command_tracker.validate_safety_preconditions(
             command=cmd,
             gateway_state=gw_state,
             device_state=dev_state,
-            gate_state=gate_st,
         )
 
         # 2. Mark command as SENT with current device timestamp
@@ -208,7 +187,6 @@ class GatewayClient:
                     command_id=cmd.command_id,
                     accepted=False,
                     reason="GATEWAY_NETWORK_ERROR",
-                    fault=None,
                     timestamp=snapshot["updated_at"],
                 )
         else:
@@ -216,7 +194,6 @@ class GatewayClient:
                 command_id=cmd.command_id,
                 accepted=False,
                 reason="GATEWAY_CLIENT_NOT_CONNECTED",
-                fault=None,
                 timestamp=snapshot["updated_at"],
             )
 
@@ -227,8 +204,7 @@ class GatewayClient:
             cmd.mark_acknowledged(accepted=resp.accepted, reason=resp.reason)
         self.command_tracker.save_command_state(cmd)
 
-        # 5. Non-movement commands (e.g. GET_STATUS, SET_ACTIVE, SET_STANDBY)
-        # can complete on acceptance since there is no physical travel
+        # Supported status and mode commands complete on acceptance.
         if resp.accepted and cmd.name in (CommandName.GET_STATUS, CommandName.SET_ACTIVE, CommandName.SET_STANDBY):
             cmd.mark_completed()
             self.command_tracker.save_command_state(cmd)
@@ -246,41 +222,4 @@ class GatewayClient:
             # Safe isolation: invalid telemetry must never corrupt state or crash application
             return None
 
-        # Reconcile movement commands against confirmed limit switch telemetry
-        snapshot = self.state_manager.snapshot()
-        self.command_tracker.reconcile_movement(
-            endpoint_gate_state=snapshot["gate_state"],
-            open_limit=snapshot["open_limit"],
-            closed_limit=snapshot["closed_limit"],
-            telemetry_timestamp_ms=snapshot.get("last_telemetry_timestamp_ms"),
-        )
-
         return result
-
-    def ingest_gate_status(self, payload: dict[str, Any]) -> None:
-        """Process an asynchronous gate_status transition event from the gateway."""
-        gate_st = payload.get("state")
-        fault = payload.get("fault")
-        closed_limit = payload.get("closed_limit")
-        open_limit = payload.get("open_limit")
-
-        status_update: dict[str, Any] = {}
-        if gate_st:
-            status_update["gate_state"] = gate_st
-        if fault is not None:
-            status_update["fault"] = fault
-        if closed_limit is not None:
-            status_update["closed_limit"] = bool(closed_limit)
-        if open_limit is not None:
-            status_update["open_limit"] = bool(open_limit)
-
-        if status_update:
-            self.state_manager.update_from_device_status(status_update)
-
-        snapshot = self.state_manager.snapshot()
-        self.command_tracker.reconcile_movement(
-            endpoint_gate_state=snapshot["gate_state"],
-            open_limit=snapshot["open_limit"],
-            closed_limit=snapshot["closed_limit"],
-            telemetry_timestamp_ms=snapshot.get("last_telemetry_timestamp_ms"),
-        )

@@ -91,7 +91,7 @@ def _derive_ws_url(http_url: str) -> str:
 
 
 GATEWAY_WS_URL = os.getenv("GATEWAY_WS_URL") or _derive_ws_url(GATEWAY_HTTP_URL)
-ROVER_MODE = os.getenv("ROVER_MODE", "simulator").lower()
+ROVER_MODE = os.getenv("ROVER_MODE", "simulator").strip().lower()
 if ROVER_MODE not in ("simulator", "network"):
     raise ValueError("ROVER_MODE must be 'simulator' or 'network'")
 
@@ -103,7 +103,7 @@ def _publish_rover_status(status: RoverStatus) -> None:
     })
 
 # Default in-memory simulator for hardware-free development and tests
-gateway_simulator = GatewaySimulator(initial_gate_state=None)
+gateway_simulator = GatewaySimulator()
 
 if GATEWAY_MODE in ("network", "real"):
     gateway_client = GatewayClient(
@@ -236,7 +236,7 @@ def reset_session():
     """
     Explicit demo session reset.
     Clears current session telemetry, events, and commands from SQLite,
-    clears in-memory command tracking, and resets physical gate state to UNKNOWN.
+    clears in-memory command tracking, and resets mission mode and sensor state.
     Preserves active gateway and device connection states so live exhibition
     hardware is not falsely marked disconnected.
     Synchronized against concurrent telemetry ingestion and command dispatch.
@@ -251,7 +251,7 @@ def reset_session():
     })
     return {
         "status": "session_reset",
-        "message": "Demo session data cleared. Gate state initialized as UNKNOWN.",
+        "message": "Demo session data cleared. Device and sensor state are awaiting fresh telemetry.",
         "mission_state": state,
     }
 

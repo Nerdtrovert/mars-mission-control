@@ -1,123 +1,99 @@
-# Mars Mission Control — System Architecture & Component Boundaries (docs/architecture.md)
+# Mars Mission Control architecture
 
-This document details the high-level architecture, subsystem boundaries, data flows, and hardware interaction models for the Mars Mission Control exhibition project.
+## Components and ownership
 
----
+```text
+Lander ESP32 --private Wi-Fi, TCP/JSON--> Raspberry Pi gateway --HTTP/WebSocket--> Mac backend
+                                               ^                                | SQLite + dashboard
+                                               | UDP 5005                       v
+Rover ESP32 --HC-12 9600--> Windows Tkinter GUI --UDP--> Pi                Browser / exhibition TV
 
-## 1. Physical Architecture Topology
-
-```
- +--------------------------------------------------------------------------------------------------------------------+
- |                                          EXHIBITION RIG / LANDER PLATFORM                                          |
- |                                                                                                                    |
- |   +------------------------------------+             USB Serial              +----------------------------------+  |
- |   |        ESP32 Lander Controller     | <=================================> |    Raspberry Pi 4 Edge Gateway   |  |
- |   | - Servo PWM (MG996R pair)          |          (115200 8N1 JSON)          | - Serial framed port owner       |  |
- |   | - Debounced Limit Switches         |                                     | - HTTP REST API                  |  |
- |   | - Environmental Sensors (BMP, DHT) |                                     | - WebSocket Telemetry Broadcaster|  |
- |   | - WS2812B & LCD Status Output      |                                     +----------------------------------+  |
- |   +------------------------------------+                                                       ||                  |
- +------------------------------------------------------------------------------------------------||------------------+
-                                                                                                  || Private Local Wi-Fi
-                                                                                                  || (No internet required)
- +------------------------------------------------------------------------------------------------||------------------+
- |                                               OPERATOR & MISSION CONTROL STATION               ||                  |
- |                                                                                                \/                  |
- |   +------------------------------------+                                     +----------------------------------+  |
- |   |          Exhibition TV             | <================================== |      MacBook Mission Backend     |  |
- |   | - Passive secondary video monitor  |             HDMI Video              | - FastAPI Mission Coordinator    |  |
- |   | - Full-screen dashboard UI         |                                     | - Gateway Client Adapter         |  |
- |   | - Mission status dashboard         |                                     | - SQLite Mission History        |  |
- |   +------------------------------------+                                     | - Operator Web Dashboard Host    |  |
- |                                                                              +----------------------------------+  |
- +--------------------------------------------------------------------------------------------------------------------+
+Drone ESP32 --local-network telemetry--> interface not yet specified
 ```
 
----
+- **Lander ESP32** owns BMP280, DHT11, display, status LEDs, and operating mode.
+  It initiates a persistent newline-delimited JSON TCP connection to the Pi on
+  the private local Wi-Fi network. USB serial remains for programming/debugging
+  only. Status query and ACTIVE/STANDBY commands use the Wi-Fi stream. The
+  retired ramp, servo, actuator, and limit-switch hardware are absent.
+- **Raspberry Pi 4** owns the lander TCP listener and an independent UDP
+  receiver for rover GUI telemetry on port 5005. Both are started and stopped
+  with the gateway FastAPI lifecycle. Gateway process health is separate from
+  device connectivity, which requires recent valid telemetry.
+- **MacBook backend** owns mission state, SQLite persistence, command auditing,
+  API, and dashboard WebSocket/polling. In network mode it obtains lander and
+  rover telemetry from the Pi; it never opens device serial ports.
+- **Dashboard** shows separate lander and rover status. A reported rover
+  command does not prove physical movement.
 
-## 2. Component Ownership Boundaries
+## Lander path
 
-### 2.1 ESP32 Lander Controller
-- **Physical Ownership**: Controls GPIOs 18 & 19 (servo signals), GPIO 23 (button), GPIOs 32 & 33 (limits), GPIOs 25 & 26 (LEDs), GPIO 27 (WS2812B), GPIO 17 (DHT11), and GPIOs 21 & 22 (I2C bus).
-- **Autonomous Safety**: Evaluates mechanical switch debouncing and servo ramp limits locally. If network communication drops, local limit switch protection remains 100% active.
-- **Frozen Firmware**: The microcontroller runs `v1.3.1-esp32-baseline` from `Lander/lander/lander.ino`.
+The ESP32 connects as a TCP client to LANDER_TCP_HOST:LANDER_TCP_PORT (default
+Pi bind address 0.0.0.0:5006) and sends the existing newline-delimited JSON
+telemetry at about 1 Hz in ACTIVE mode. The gateway validates each frame,
+updates device status only for valid messages, and broadcasts telemetry through
+its existing /ws/telemetry endpoint. After GATEWAY_OFFLINE_TIMEOUT_S without a
+valid frame, the device is OFFLINE and cached sensor values are cleared. The
+Mac NetworkGatewayRunner processes the same message contract as simulator
+mode, persists it, and broadcasts dashboard updates. Sensor failures remain
+null with false health flags.
 
-### 2.2 Raspberry Pi 4 Edge Gateway
-- **Physical Link**: Sole process holding the ESP32 USB serial link (commonly `/dev/ttyACM0` or `/dev/ttyUSB0`).
-- **Framing & Relay**: Deserializes raw newline-delimited bytes into structured JSON objects, buffers telemetry, verifies incoming command schemas, and handles USB disconnects/reconnects.
-- **Isolation**: Prevents race conditions and multiple processes contending for the single serial port.
+Configure the lander locally by copying
+Lander/lander/lander_config.example.h to lander_config.h and entering the
+private Wi-Fi SSID/password and Pi address. The real configuration header is
+ignored by git. The ESP32 and Pi must join the same private LAN. The project
+does not invent Wi-Fi credentials or a static IP plan, and it does not configure
+the Pi's access point. Removing the lander-to-Pi data cable does not power the
+ESP32; the controller still needs a suitable board power source.
 
-### 2.3 MacBook Mission Control Backend
-- **State Coordination**: Aggregates telemetry, monitors command lifecycles (`CREATED` → `SENT` → `ACKNOWLEDGED` → `COMPLETED`), detects stale timeouts, and logs state transitions into SQLite.
-- **Dashboard API**: Serves web assets and WebSocket telemetry to the browser dashboard.
-- **Constraint**: Must NEVER attempt to access the ESP32 serial port directly in production.
+The simulator emits the same sensor contract, deterministic bounded readings,
+and simulated-source labels without hardware access. GATEWAY_MODE=simulator or
+network selects the lander source.
 
-### 2.4 Exhibition TV
-- **Display Sink**: Connected directly to the MacBook over HDMI as a second screen running the exhibition dashboard in full-screen mode. Does not participate in network protocols.
+## Rover path
 
----
+The Windows GUI owns the HC-12 USB-TTL COM port and forwards parsed readings
+to the Pi by UDP. A packet has exactly these five fields:
 
-## 3. Data Flow & Communication Lifecycle
-
-### 3.1 Normal Telemetry Streaming (1 Hz)
-1. ESP32 loops every 1000 ms, reads BMP280 and DHT11 sensors, reads limit switches.
-2. Emits `{"type": "telemetry", ...}\n` over USB serial at 115200 baud.
-3. Raspberry Pi reads line, checks framing, and broadcasts over WebSocket `/ws/telemetry`.
-4. MacBook `GatewayClient` ingests JSON line, passes to `TelemetryService`, and updates `MissionStateManager`.
-5. The browser dashboard renders current mission state, live sensor values, command history, and telemetry history.
-
-### 3.2 Safe Movement Command Sequence (`OPEN_GATE`)
-```
-Operator         MacBook Backend                 Raspberry Pi                     ESP32 Lander
-   |                    |                              |                               |
-   |--- Submit Command -|                              |                               |
-   |                    |-- Validate Safety Precond. --|                               |
-   |                    |   (Gate must be CLOSED,      |                               |
-   |                    |    Device must be ONLINE)    |                               |
-   |                    |                              |                               |
-   |                    |-- POST /api/commands ------->|                               |
-   |                    |   {"command": "OPEN_GATE"}   |-- Serial JSON Line ---------->|
-   |                    |                              |   {"command": "OPEN_GATE"}    |
-   |                    |                              |<-- Ack Line (accepted: true) -|
-   |                    |<-- Ack HTTP Response --------|   (Movement starts: OPENING)  |
-   |                    |   (Status: ACKNOWLEDGED)     |                               |
-   |                    |   [NOT COMPLETED YET]        |                               |
-   |                    |                              |                               |
-   |                    |                              |<-- gate_status: "OPENING" ----|
-   |                    |<-- WS: gate_status ----------|                               |
-   |                    |                                       ... (Servos ramp) ...  |
-   |                    |                              |<-- gate_status: "OPEN" -------|
-   |                    |<-- WS: gate_status ----------|   (Open limit switch hit!)    |
-   |                    |-- Mark COMPLETED ------------|                               |
-   |<-- UI Updates -----|                                                              |
+```text
+DIST:145,PITCH:12.4,ROLL:-3.2,CMD:F,MODE:M
 ```
 
----
+The Pi validates required fields, numeric ranges, and command/mode values,
+stores only the latest valid packet, adds its receipt timestamp, and reports
+ONLINE until ROVER_OFFLINE_TIMEOUT_S elapses without another valid packet.
+Invalid packets do not overwrite state. The Pi exposes /api/rover/status and
+publishes rover_telemetry updates. ROVER_MODE=simulator or network independently
+selects the Mac's deterministic rover simulator or Pi polling adapter. No
+battery, speed, or encoder values are part of the rover schema.
 
-## 4. Subsystem Isolation & Fault Handling
+## Power and peripheral limits
 
-- **Latched Hardware Faults**: Faults reported by the ESP32 (`FAULT_BOTH_LIMITS_ACTIVE`, `FAULT_OPEN_TIMEOUT`, etc.) are latched in firmware. Software cannot blindly reset a hardware fault.
-- **Network Degradation**: If the Pi gateway or Wi-Fi drops, the lander continues running its autonomous safety routines. The MacBook transitions device state to `OFFLINE` and physical gate state to `UNKNOWN`.
-- **Sensor Fault Tolerance**: If the DHT11 or BMP280 fails or disconnects, the field is reported as `null` with sensor state `FAILED`. Unrelated telemetry and gate actuation continue safely.
+1. **Central Controller & Supply**:
+   - The lander ESP32 DevKit V1 is powered via USB (5V) or regulated 5V to the `VIN` pin.
+   - Enabling Wi-Fi introduces transmission current spikes (typically 200–300 mA peak). The upstream power source must maintain voltage stability under load to prevent brownouts.
+   - Wi-Fi eliminates the serial data cable between the lander and Raspberry Pi; it does **not** eliminate the lander's power cable. The lander requires its own stable power feed.
 
----
+2. **Low-Current Environmental Sensors**:
+   - **BMP280**: Operates at 3.3V logic and supply; draws < 1 mA. Powered directly from the ESP32 `3V3` regulator pin.
+   - **DHT11**: Operates at 3.3V to 5V; draws 1–2.5 mA during polling. Powered safely from the ESP32 `3V3` or `5V` rail.
 
-## 5. Future Device Integration Boundary (Proposed; Not Implemented)
+3. **Status Indicators**:
+   - **Green LED (GPIO 25)** and **Red LED (GPIO 26)**: Driven directly from GPIOs through series current-limiting resistors (~5–10 mA each), well within the safe 12 mA per-pin rating of the ESP32.
 
-The current application integrates only the ESP32 lander. `MissionStateManager`, the lander command set, the Pi serial service, and the dashboard gate controls are lander-specific. The gateway's current `/api/devices` response describes the connected lander; it is not a general rover/drone registry. Do not treat this proposal as an API contract or as implemented capability.
+4. **Display**:
+   - **20x4 Character LCD (I2C / PCF8574 backpack)**: Backlight and HD44780 contrast typically require 5V (`VIN` rail), drawing ~20–50 mA total. Backpack I2C lines (`SDA` GPIO 21, `SCL` GPIO 22) must remain 3.3V logic compatible.
 
-Future rover or drone work should be added beside the lander path through an explicitly reviewed design, preserving current lander behavior:
+5. **Addressable LED Strip (WS2812B)**:
+   - Contains 30 NeoPixels with data on GPIO 27.
+   - Full-white unthrottled draw (30 × 60 mA = 1.8 A) would exceed onboard regulator limits and typical USB ports.
+   - In firmware (`lander.ino`), brightness is explicitly clamped to `60` / 255 (`gStrip.setBrightness(60)`) and runs dynamic HSV space animations, constraining current to ~150–300 mA peak.
+   - Power must be drawn from the 5V / `VIN` rail (or a dedicated 5V supply sharing common ground if the USB supply is constrained), **never from an ESP32 GPIO pin**.
+   - ESP32 GPIO pins provide logic signals only and must never be used to power active peripherals. Avoid redundant separate power supplies when the host 5V feed and onboard rails safely meet these verified budgets.
 
-- **Identity and type:** Assign each physical unit a stable, unique `device_id` independent of its network address, plus a separately defined device type and declared capabilities. Do not reuse `esp32-lander` or infer identity from the transport address.
-- **Independent lifecycle:** Track connection, freshness, and faults per device. A failure or stale stream from one vehicle must not mark another vehicle offline or alter the lander's verified gate state.
-- **Device-specific telemetry:** Keep each device's measurements and schema explicit and versioned. A rover or drone payload must not be forced into lander-only fields. Preserve the distinction between the device clock/uptime and host receipt time, and mark simulated records as simulated.
-- **Transport ownership:** Use a device-appropriate adapter with a single clear owner for each physical transport. The existing Pi remains the sole owner of the lander's USB serial port; a new integration must not open that port from the MacBook or compete with the gateway.
-- **Commands and acknowledgements:** Define which component validates and dispatches each command. Correlate requests and responses, distinguish accepted/acknowledged from completed, and never add automatic movement or flight retries without a separately accepted safety design. Reconnect by querying state; do not resume physical action automatically.
-- **Simulation and acceptance:** Provide deterministic hardware-free tests for schema validation, ordering, disconnect/reconnect, timeouts, and safety boundaries. Before hardware acceptance, test each device's transport and local safety behavior on the relevant physical unit; simulator success alone is not hardware verification.
+## Drone interface status
 
-### Rover telemetry boundary
-
-The rover is independent of the ESP32 lander. Its Windows Tkinter GUI owns the rover COM port and broadcasts parsed `DIST,PITCH,ROLL,CMD,MODE,VOLT` samples by UDP to the Pi on port 5005. The Pi runs a dedicated UDP receiver beside (not inside) the lander serial manager and exposes a rover status endpoint plus `rover_telemetry` gateway broadcasts. The Mac selects rover behavior with `ROVER_MODE`, independently of `GATEWAY_MODE`: simulator mode uses a deterministic in-memory rover; network mode polls the Pi HTTP status endpoint and forwards the common rover status contract to the dashboard WebSocket. Neither backend nor Pi opens the rover COM port or sends movement commands. Battery percentage stays unknown until a suitable 3S LiPo mapping is validated.
-- **Safety isolation:** Keep device-specific emergency behavior and interlocks under the device controller's authority. A generic dashboard or backend must not invent a safety capability that the device does not expose.
-
-These principles are a planning boundary only. No generic device framework, additional API fields/endpoints, or rover/drone code is introduced by this document.
+No drone transport, telemetry schema, implementation, or simulator exists in
+the repository. The drone team must define identity, fields and units,
+framing/transport, update cadence, sender validation, health and stale timeout
+semantics, and whether commands are in scope before implementation.

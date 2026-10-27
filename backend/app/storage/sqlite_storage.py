@@ -2,7 +2,7 @@
 
 Provides thread-safe persistence for:
 1. Validated telemetry (5-minute sliding retention)
-2. Mission events (connection, gate-state, fault, and recovery transitions)
+2. Mission events (connection, sensor-health, and recovery transitions)
 3. Command lifecycle history
 """
 
@@ -52,8 +52,32 @@ class SQLiteStorage:
                     cursor.execute("PRAGMA journal_mode = WAL;")
                     cursor.execute("PRAGMA synchronous = NORMAL;")
 
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='telemetry'")
+                if cursor.fetchone() is not None:
+                    columns = {row[1] for row in cursor.execute("PRAGMA table_info(telemetry)")}
+                    if "gate_state" in columns or "closed_limit" in columns or "fault" in columns:
+                        cursor.execute("BEGIN")
+                        cursor.execute("""CREATE TABLE telemetry_clean (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT, received_at TEXT NOT NULL,
+                            received_at_epoch REAL NOT NULL, timestamp_ms INTEGER NOT NULL,
+                            mode TEXT NOT NULL, bmp_temperature_c REAL, pressure_hpa REAL,
+                            dht_temperature_c REAL, humidity_pct REAL, bmp280_ok INTEGER, dht11_ok INTEGER
+                        )""")
+                        retained = [name for name in ("id", "received_at", "received_at_epoch", "timestamp_ms", "mode",
+                            "bmp_temperature_c", "pressure_hpa", "dht_temperature_c", "humidity_pct", "bmp280_ok", "dht11_ok") if name in columns]
+                        names = ", ".join(retained)
+                        cursor.execute(f"INSERT INTO telemetry_clean ({names}) SELECT {names} FROM telemetry")
+                        cursor.execute("DROP TABLE telemetry")
+                        cursor.execute("ALTER TABLE telemetry_clean RENAME TO telemetry")
+                        cursor.execute("COMMIT")
+
                 for statement in ALL_SCHEMA_STATEMENTS:
                     cursor.execute(statement)
+                # These persisted records describe a mechanism removed from the
+                # project. Device connection, sensor, recovery, and other event
+                # history remains available.
+                cursor.execute("DELETE FROM mission_events WHERE event_type IN ('GATE_STATE_CHANGE', 'FAULT_RAISED', 'FAULT_CLEARED')")
+                cursor.execute("DELETE FROM commands WHERE name IN ('OPEN_GATE', 'CLOSE_GATE')")
             finally:
                 cursor.close()
 
@@ -70,33 +94,28 @@ class SQLiteStorage:
         recv_epoch = now.timestamp()
 
         # Validate mandatory telemetry fields are present
-        required_fields = ("timestamp_ms", "mode", "gate_state", "closed_limit", "open_limit")
+        required_fields = ("timestamp_ms", "mode")
         for field in required_fields:
             if field not in telemetry:
                 raise ValueError(f"Missing required telemetry field for persistence: {field}")
 
         query = """
         INSERT INTO telemetry (
-            received_at, received_at_epoch, timestamp_ms, mode, gate_state,
-            closed_limit, open_limit, bmp_temperature_c, pressure_hpa,
-            dht_temperature_c, humidity_pct, bmp280_ok, dht11_ok, fault
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            received_at, received_at_epoch, timestamp_ms, mode, bmp_temperature_c, pressure_hpa,
+            dht_temperature_c, humidity_pct, bmp280_ok, dht11_ok
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         params = (
             recv_iso,
             recv_epoch,
             int(telemetry["timestamp_ms"]),
             str(telemetry["mode"]),
-            str(telemetry["gate_state"]),
-            1 if telemetry["closed_limit"] else 0,
-            1 if telemetry["open_limit"] else 0,
             telemetry.get("bmp_temperature_c"),
             telemetry.get("pressure_hpa"),
             telemetry.get("dht_temperature_c"),
             telemetry.get("humidity_pct"),
             1 if telemetry.get("bmp280_ok") else 0 if telemetry.get("bmp280_ok") is False else None,
             1 if telemetry.get("dht11_ok") else 0 if telemetry.get("dht11_ok") is False else None,
-            telemetry.get("fault"),
         )
 
         with self._lock:

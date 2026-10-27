@@ -37,7 +37,7 @@
 
 ## 1. Purpose & System Architecture
 
-Mars Mission Control demonstrates a planetary landing and monitoring mission for a college exhibition. The frontend dashboard presents real-time telemetry, tracks mission command states, renders sensor data, and enforces strict physical safety controls for physical gate actuation.
+Mars Mission Control demonstrates a coordinated planetary landing and monitoring mission for a college exhibition. The frontend dashboard presents real-time telemetry from the lander (DHT11 temperature/humidity, BMP280 temperature/pressure, LCD status, status LEDs) and rover (HC-SR04 distance, MPU6050 pitch/roll, mode/command), tracks mission command states (`GET_STATUS`, `SET_ACTIVE`, `SET_STANDBY`), and renders independent gateway, lander, and rover health states.
 
 ### Communication Topology
 ```
@@ -48,30 +48,33 @@ Mars Mission Control demonstrates a planetary landing and monitoring mission for
  +------------------------+                           |  - Dashboard Broadcaster           |
                                                       +------------------------------------+
                                                                         ||
-                                                                        || Private Local Network
+                                                                        || Private Local Wi-Fi
                                                                         || HTTP / WebSocket (Port 8001)
                                                                         \/
                                                       +------------------------------------+
                                                       |    Raspberry Pi 4 Edge Gateway     |
-                                                      |  - Serial Port Owner (/dev/ttyACM0)|
+                                                      |  - Lander Wi-Fi TCP (Port 5006)    |
+                                                      |  - Rover UDP Receiver (Port 5005)  |
                                                       +------------------------------------+
-                                                                        ||
-                                                                        || USB Serial (115200 8N1)
-                                                                        \/
-                                                      +------------------------------------+
-                                                      |       ESP32 Lander Controller      |
-                                                      |  - Firmware v1.3.1-esp32-baseline  |
-                                                      |  - Servos, Switches, Sensors       |
-                                                      +------------------------------------+
+                                                         //                            \\
+                            Private Local Wi-Fi (TCP 5006)                              UDP 5005
+                                                       //                                \\
+                                     +--------------------+                     +--------------------+
+                                     |    ESP32 Lander    |                     | Windows Rover GUI  |
+                                     | - DHT11, BMP280    |                     | (HC-12 9600 Serial)|
+                                     | - 20x4 LCD, LEDs   |                     +--------------------+
+                                     +--------------------+
 ```
 
 ### Critical Architecture Boundaries
 - **Backend Host**: The frontend communicates **exclusively** with the MacBook Mission Control backend.
-- **Gateway Isolation**: The frontend **must never** attempt to contact the Raspberry Pi Edge Gateway (port 8001) or ESP32 serial port directly.
+- **Gateway Isolation**: The frontend **must never** attempt to contact the Raspberry Pi Edge Gateway (port 8001), lander TCP port (5006), or rover UDP port (5005) directly.
 - **Zero Internet Requirement**: Core mission telemetry, command relay, state synchronization, and dashboard rendering operate completely offline over a private local network.
 - **Execution Modes (`simulation_mode`)**:
-  - `GATEWAY_MODE=simulator`: The backend generates synthetic telemetry with an internal virtual lander.
-  - `GATEWAY_MODE=network`: The backend relays real telemetry from the Raspberry Pi hardware gateway.
+  - `GATEWAY_MODE=simulator`: The backend generates synthetic lander telemetry with an internal virtual lander.
+  - `GATEWAY_MODE=network`: The backend relays real lander telemetry from the Raspberry Pi hardware gateway.
+  - `ROVER_MODE=simulator`: The backend generates deterministic rover telemetry.
+  - `ROVER_MODE=network`: The backend reads rover status from the Raspberry Pi hardware gateway.
   - The backend attaches `"simulation_mode": true/false` to every state snapshot. The UI **must visibly distinguish** simulator data from physical hardware measurements.
 
 ### Base URLs & Ports
@@ -80,6 +83,9 @@ Mars Mission Control demonstrates a planetary landing and monitoring mission for
 | **MacBook Mission Backend (REST)** | HTTP | `http://localhost:8000` | Served by MacBook FastAPI application |
 | **MacBook Mission Backend (WebSocket)** | WebSocket | `ws://localhost:8000/ws/telemetry` | Live telemetry & state streaming |
 | **College Team React / Vite Dev Server** | HTTP | `http://localhost:5173` | Typical React/Vite development server (port 5173) |
+| **Raspberry Pi Gateway (HTTP/WS)** | HTTP / WS | `http://<pi-ip>:8001` | Gateway API (Mac-to-Pi internal; not for frontend) |
+| **Raspberry Pi Lander TCP Receiver** | TCP | `<pi-ip>:5006` | Ingests ESP32 lander telemetry over Wi-Fi |
+| **Raspberry Pi Rover UDP Receiver** | UDP | `<pi-ip>:5005` | Ingests rover datagrams from Windows GUI |
 | **Exhibition Local Wi-Fi (Backend)** | HTTP | `http://<macbook-ip>:8000` | Dynamic IP assigned on local router |
 | **Exhibition Local Wi-Fi (WebSocket)** | WebSocket | `ws://<macbook-ip>:8000/ws/telemetry` | Same host as HTTP, protocol switch |
 
@@ -190,9 +196,9 @@ Before any demonstration to stakeholders or request for physical hardware integr
 ### 3.1 The Simulator-First Mandate
 The college frontend development team must develop, style, and verify all dashboard components primarily using Mission Control's built-in **Simulator Mode**. 
 
-Physical hardware (the Raspberry Pi 4 edge gateway, USB serial connection, and ESP32 physical lander mechanism) is scarce, subject to mechanical wear (MG996R servos, 3D-printed gears, physical limit micro-switches), and sensitive to electrical faults. Directing untested frontend code against physical hardware introduces risks of invalid servo commands, limit switch collisions, or misleading debugging sessions caused by electrical gremlins rather than UI bugs.
+Physical hardware (the Raspberry Pi 4 edge gateway, ESP32 lander controller, and rover radio transceiver) is scarce and sensitive to setup variations. Directing untested frontend code against physical hardware introduces unnecessary delays and misleading debugging sessions caused by network or hardware setup issues rather than UI bugs.
 
-The Mission Control backend features a high-fidelity, deterministic in-memory simulator (`GatewaySimulator` and `SimulatorRunner`) that faithfully implements the gateway REST contracts, WebSocket telemetry stream, device status reporting, and physical gate movement state transitions. Developing against this simulator guarantees rapid, hardware-free iteration and clean architecture boundaries.
+The Mission Control backend features a high-fidelity, deterministic in-memory simulator (`GatewaySimulator`, `SimulatorRunner`, and `RoverSimulator`) that faithfully implements the REST contracts, WebSocket telemetry stream, device status reporting, and rover dynamics. Developing against this simulator guarantees rapid, hardware-free iteration and clean architecture boundaries.
 
 ---
 
@@ -203,13 +209,13 @@ Frontend developers must start the backend in simulator mode using the following
 
 ```bash
 # Terminal (MacBook / Linux from repository root):
-GATEWAY_MODE=simulator PYTHONPATH=backend backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+GATEWAY_MODE=simulator ROVER_MODE=simulator PYTHONPATH=backend backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 *Note: If activating the Python virtual environment in your shell first:*
 ```bash
 source backend/.venv/bin/activate
-GATEWAY_MODE=simulator PYTHONPATH=backend uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+GATEWAY_MODE=simulator ROVER_MODE=simulator PYTHONPATH=backend uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 #### Verified URLs & Verification Points
@@ -217,6 +223,7 @@ GATEWAY_MODE=simulator PYTHONPATH=backend uvicorn app.main:app --host 127.0.0.1 
 | :--- | :--- | :--- |
 | **Dashboard Asset Host** | `http://127.0.0.1:8000/dashboard` | Serves dashboard HTML/CSS/JS |
 | **Backend Health Check** | `http://127.0.0.1:8000/health` | Returns JSON with `"simulation_mode": true`, `"status": "healthy"` |
+| **Rover Status Endpoint** | `http://127.0.0.1:8000/api/rover/status` | Returns JSON with rover telemetry and `"source": "simulator"` |
 | **Root Endpoint** | `http://127.0.0.1:8000/` | Returns JSON with `"simulation_mode": true` |
 | **Telemetry WebSocket** | `ws://127.0.0.1:8000/ws/telemetry` | Emits `state_snapshot` followed by 1 Hz `telemetry` |
 
@@ -233,9 +240,10 @@ GATEWAY_MODE=simulator PYTHONPATH=backend uvicorn app.main:app --host 127.0.0.1 
    ```json
    {
      "mode": "ACTIVE",
-     "gate_state": "CLOSED",
      "gateway_state": "ONLINE",
      "device_state": "ONLINE",
+     "bmp280_ok": true,
+     "dht11_ok": true,
      "simulation_mode": true
    }
    ```
@@ -255,15 +263,15 @@ The frontend team must systematically verify the following 9 capabilities agains
 
 | # | Test Capability | Expected Simulator Behavior & UI Requirement |
 | :- | :--- | :--- |
-| **1** | **Initial State & Cold Loading** | On initial load or after session reset, `gate_state` is `UNKNOWN`. `OPEN_GATE` and `CLOSE_GATE` buttons must both be disabled. WebSocket immediately delivers a `state_snapshot` message with current connection and mission state. |
+| **1** | **Initial State & Cold Loading** | On initial load or after session reset, `mode` is initialized and WebSocket immediately delivers a `state_snapshot` message with current connection and mission state. |
 | **2** | **Live Telemetry Streaming** | Receives ~1 Hz telemetry messages over WebSocket (`ws://127.0.0.1:8000/ws/telemetry`). The `timestamp_ms` increases by 1000 ms each tick. The UI must format `timestamp_ms` as `HH:MM:SS` (duration), **never** as raw milliseconds. |
 | **3** | **Sensor Readings & Failures** | Simulator emits synthetic nominal sensor values (`bmp_temperature_c: 24.2`, `pressure_hpa: 1013.5`, `dht_temperature_c: 24.0`, `humidity_pct: 58.0`). If a sensor reports failure (`bmp280_ok: false`), the UI must display `--` and a `FAILED` badge; it must **never** display `0` or keep frozen previous numbers. |
-| **4** | **Gateway & Device Status** | Both gateway and device report `ONLINE` in standard simulator mode. Badges must be rendered independently (Gateway Badge and Lander Badge). |
-| **5** | **Gate States & Movement Transitions** | The simulator models physical movement over 3 discrete 1-second ticks:<br>• `OPEN_GATE` (when `CLOSED`): state becomes `OPENING`, closed switch clears. After 3 ticks, state transitions to `OPEN` and `open_limit` asserts.<br>• `CLOSE_GATE` (when `OPEN`): state becomes `CLOSING`, open switch clears. After 3 ticks, state transitions to `CLOSED` and `closed_limit` asserts. |
-| **6** | **WebSocket Disruption Recovery** | Stop the backend server (`Ctrl+C`). Within seconds, the UI must display the red `CONNECTION DISRUPTED: RECONNECTING TO MISSION BACKEND...` banner. Restart the backend: the client must automatically reconnect, receive a fresh `state_snapshot`, and automatically hide the banner. |
-| **7** | **Command Submission Lifecycle** | Post commands to `POST /api/mission/commands`. The UI must track the lifecycle states: `CREATED` → `SENT` → `ACKNOWLEDGED` → `COMPLETED`. |
-| **8** | **Fault & Error Presentation** | Submit an invalid command (e.g. `OPEN_GATE` while gate is `OPEN` or `UNKNOWN`). The backend returns HTTP 400 Bad Request with an error description. The UI must display an informative error notification without breaking the dashboard loop. If a latched `fault` is simulated, all actuation controls must lock down. |
-| **9** | **Mission History & IST Timezones** | Polling `/api/mission/commands`, `/api/mission/events`, and `/api/mission/telemetry/history` must display human-readable timestamps in Indian Standard Time (IST, UTC+05:30) with 24-hour `HH:mm:ss` format. History polling must never overwrite newer live telemetry. |
+| **4** | **Subsystem Status Badges** | Gateway, Lander, and Rover report status independently. Badges must be rendered independently (Gateway Badge, Lander Badge, and Rover Badge). |
+| **5** | **Operating Mode Commands** | Submit mode commands (`SET_ACTIVE`, `SET_STANDBY`, `GET_STATUS`) via `POST /api/mission/commands`. Verify state transitions between `ACTIVE` (sensors polling) and `STANDBY` (sensors paused, readings `null`). |
+| **6** | **Rover Telemetry Streaming** | Ingest live `rover_telemetry` messages over WebSocket and poll `GET /api/rover/status`. Accurately render `distance_cm`, `pitch_deg`, `roll_deg`, `command`, `mode`, and obstacle alerts. |
+| **7** | **WebSocket Disruption Recovery** | Stop the backend server (`Ctrl+C`). Within seconds, the UI must display the red `CONNECTION DISRUPTED: RECONNECTING TO MISSION BACKEND...` banner. Restart the backend: the client must automatically reconnect, receive a fresh `state_snapshot`, and automatically hide the banner. |
+| **8** | **Command Submission Lifecycle** | Post commands to `POST /api/mission/commands`. The UI must track the lifecycle states: `CREATED` → `SENT` → `ACKNOWLEDGED` → `COMPLETED`. |
+| **9** | **Mission History & IST Timezones** | Polling `/api/mission/commands`, `/api/mission/events`, and `/api/mission/telemetry/history` must display human-readable timestamps in Indian Standard Time (IST, UTC+05:30) with 24-hour `hourCycle: 'h23'` format (`HH:mm:ss`). History polling must never overwrite newer live telemetry. |
 
 ---
 
@@ -272,17 +280,17 @@ The frontend team must systematically verify the following 9 capabilities agains
 To prevent false assumptions during frontend development, understand what the simulator implements versus physical realities:
 
 #### What the Simulator Implements:
-- **Deterministic Mechanics**: Gate movement progresses in exact 3-second steps (`CLOSED` → `OPENING` [3 ticks] → `OPEN`).
+- **Deterministic Environmental Telemetry**: Emits nominal temperature, pressure, and humidity sensor readings.
+- **Operating Mode Transitions**: Transitions cleanly between `ACTIVE` and `STANDBY`.
+- **Rover Telemetry Simulation**: Emits simulated rover attitude (pitch/roll), distance, motion commands, and obstacle warnings.
 - **Standard Protocol Compliance**: Emits identical JSON telemetry fields (`TELEMETRY_FIELDS`), WebSocket envelopes, and HTTP response structures as the physical Pi gateway and ESP32.
 - **Request ID Tracking**: Full UUID tracking and acknowledgement mapping between frontend requests and virtual lander responses.
-- **Staleness Tracking**: Evaluates gateway and device staleness if telemetry ticks cease.
+- **Staleness Tracking**: Evaluates gateway, lander, and rover staleness if telemetry ticks cease.
 
 #### What the Simulator Does NOT Implement (Physical Realities):
-- **No Servo Electrical Dynamics**: The simulator does not model MG996R PWM pulse jitter, servo stall currents, electrical brownouts, or external power supply load drops.
-- **No Mechanical Irregularities**: Physical gates can experience physical drag, mechanical gear backlash, misaligned limit switches, or physical obstructions.
-- **No Physical Limit Switch Bouncing**: In hardware, limit switches debounce over several milliseconds; the simulator flips boolean flags instantaneously.
-- **No Analog Sensor Drift or Noise**: Simulator sensor values are fixed nominal values (24.2°C, 1013.5 hPa, 24.0°C, 58.0%). In hardware, the BMP280 may fail to respond over I2C (address 0x76/0x77), and DHT11 digital one-wire reads can encounter checksum timeouts.
-- **No Serial Port Dropouts**: Physical USB serial cables (`/dev/ttyACM0`) can suffer physical disconnects, OS device re-enumeration (`/dev/ttyACM1`), or framing errors.
+- **No Physical Sensor Noise or Bus Dropouts**: In hardware, the BMP280 can fail to respond over I2C (address 0x76/0x77), and DHT11 digital one-wire reads can encounter checksum timeouts.
+- **No Wi-Fi Packet Jitter or Disconnects**: In hardware, the lander ESP32 communicates over Wi-Fi TCP, subject to RF interference or router reconnects.
+- **No Rover Radio Link Fluctuations**: In hardware, the rover sends HC-12 9600-baud packets to a Windows PC, which forwards datagrams over UDP port 5005. Packets may drop when out of range.
 
 ---
 
@@ -355,10 +363,6 @@ Upon opening the WebSocket connection to `/ws/telemetry`, the backend **guarante
   "type": "state_snapshot",
   "data": {
     "mode": "ACTIVE",
-    "gate_state": "UNKNOWN",
-    "closed_limit": false,
-    "open_limit": false,
-    "fault": null,
     "last_telemetry_at": "2026-10-23T10:00:00.000000+00:00",
     "updated_at": "2026-10-23T10:00:00.000000+00:00",
     "gateway_state": "ONLINE",
@@ -376,9 +380,9 @@ Upon opening the WebSocket connection to `/ws/telemetry`, the backend **guarante
 
 ### Initial State & Disconnected Representation
 When starting up or after a communication failure:
-- **`gate_state`** defaults to `"UNKNOWN"`. The UI must display `UNKNOWN` and inhibit movement buttons until fresh telemetry or status query confirms switch limits.
+- **`mode`** defaults to `"UNKNOWN"`. The UI displays `UNKNOWN` until fresh telemetry or status query confirms device mode (`ACTIVE` or `STANDBY`).
 - **`gateway_state`** and **`device_state`** default to `"NOT_CONNECTED"`.
-- If the gateway or device is `OFFLINE` or `NOT_CONNECTED`, the UI must show amber/red status pills, mark telemetry as stale, and lock down physical gate actuation controls.
+- If the gateway or device is `OFFLINE` or `NOT_CONNECTED`, the UI must show amber/red status pills and mark telemetry as stale.
 
 ---
 
@@ -428,10 +432,6 @@ All REST endpoints return JSON with standard HTTP status codes.
   ```json
   {
     "mode": "ACTIVE",
-    "gate_state": "CLOSED",
-    "closed_limit": true,
-    "open_limit": false,
-    "fault": null,
     "last_telemetry_at": "2026-10-23T10:14:02.124581+00:00",
     "updated_at": "2026-10-23T10:14:02.124581+00:00",
     "gateway_state": "ONLINE",
@@ -446,7 +446,29 @@ All REST endpoints return JSON with standard HTTP status codes.
   }
   ```
 
-### 5.5 List Tracked Commands (`GET /api/mission/commands`)
+### 5.5 Independent Rover Status (`GET /api/rover/status`)
+- **Method**: `GET`
+- **Path**: `/api/rover/status`
+- **Purpose**: Fetches the latest validated rover telemetry snapshot. Independent from lander telemetry.
+- **Request Body / Parameters**: None.
+- **Response (`200 OK`)**:
+  ```json
+  {
+    "rover_id": "mars-rover-01",
+    "distance_cm": 145.0,
+    "pitch_deg": 12.4,
+    "roll_deg": -3.2,
+    "command": "F",
+    "mode": "M",
+    "connection_state": "ONLINE",
+    "last_seen": "2026-10-23T10:14:02.100000+00:00",
+    "source": "simulator",
+    "obstacle_detected": false,
+    "event": null
+  }
+  ```
+
+### 5.6 List Tracked Commands (`GET /api/mission/commands`)
 - **Method**: `GET`
 - **Path**: `/api/mission/commands`
 - **Purpose**: Returns the list of all recorded commands in chronological order.
@@ -456,11 +478,11 @@ All REST endpoints return JSON with standard HTTP status codes.
   [
     {
       "command_id": "7b09bf93-6b3a-4efb-8611-37d45a995c64",
-      "name": "OPEN_GATE",
+      "name": "SET_ACTIVE",
       "status": "COMPLETED",
       "created_at": "2026-10-23T10:12:00.100000+00:00",
       "acknowledged_at": "2026-10-23T10:12:00.220000+00:00",
-      "completed_at": "2026-10-23T10:12:03.450000+00:00",
+      "completed_at": "2026-10-23T10:12:00.350000+00:00",
       "error_reason": null,
       "params": null,
       "missing_ack": false,
@@ -471,15 +493,15 @@ All REST endpoints return JSON with standard HTTP status codes.
   ]
   ```
 
-### 5.6 Submit Command (`POST /api/mission/commands`)
+### 5.7 Submit Command (`POST /api/mission/commands`)
 - **Method**: `POST`
 - **Path**: `/api/mission/commands`
-- **Purpose**: Submits an operator command for safety verification, edge dispatch, and lifecycle tracking.
+- **Purpose**: Submits an operator command (`GET_STATUS`, `SET_ACTIVE`, `SET_STANDBY`) for edge dispatch and lifecycle tracking.
 - **Headers**: `Content-Type: application/json`
 - **Request Body Schema**:
   | Field | Type | Required | Description |
   | :--- | :--- | :--- | :--- |
-  | `command` | `string` | Optional* | Supported command name (e.g. `"OPEN_GATE"`). |
+  | `command` | `string` | Optional* | Supported command name (`"GET_STATUS"`, `"SET_ACTIVE"`, `"SET_STANDBY"`). |
   | `command_type` | `string` | Optional* | Alternative field name for backwards compatibility. *One of `command` or `command_type` is required.* |
   | `command_id` | `string` | Optional | Client-generated UUID. If omitted, backend generates one. |
   | `params` | `object` | Optional | Optional key-value parameters dictionary. |
@@ -487,7 +509,7 @@ All REST endpoints return JSON with standard HTTP status codes.
   *Example Request Body:*
   ```json
   {
-    "command_type": "OPEN_GATE",
+    "command": "SET_ACTIVE",
     "command_id": "9d4f0d38-6f68-466d-8687-8849b2533ca9"
   }
   ```
@@ -497,7 +519,7 @@ All REST endpoints return JSON with standard HTTP status codes.
   {
     "command": {
       "command_id": "9d4f0d38-6f68-466d-8687-8849b2533ca9",
-      "name": "OPEN_GATE",
+      "name": "SET_ACTIVE",
       "status": "ACKNOWLEDGED",
       "created_at": "2026-10-23T10:15:30.100000+00:00",
       "acknowledged_at": "2026-10-23T10:15:30.250000+00:00",
@@ -520,18 +542,17 @@ All REST endpoints return JSON with standard HTTP status codes.
   ```
 
 - **Error Responses (`400 Bad Request`)**:
-  Returned when physical safety preconditions fail or a duplicate command ID is submitted.
+  Returned when an invalid command name or duplicate active command ID is submitted.
   ```json
   {
-    "detail": "Cannot dispatch OPEN_GATE: Gate is OPEN (must be CLOSED)"
+    "detail": "Invalid command name: UNKNOWN_CMD"
   }
   ```
-  *(Other common error details: `"Cannot dispatch OPEN_GATE: Gateway is OFFLINE"`, `"Command with ID ... is already pending or active"`).*
 
-### 5.7 Query Mission Events (`GET /api/mission/events`)
+### 5.8 Query Mission Events (`GET /api/mission/events`)
 - **Method**: `GET`
 - **Path**: `/api/mission/events`
-- **Purpose**: Fetches system transitions, connection changes, and fault events from persistent SQLite storage.
+- **Purpose**: Fetches system transitions, connection changes, and status events from persistent SQLite storage.
 - **Query Parameters**:
   | Parameter | Type | Default | Description |
   | :--- | :--- | :--- | :--- |
@@ -547,18 +568,17 @@ All REST endpoints return JSON with standard HTTP status codes.
       "timestamp_epoch": 1792750323.45,
       "event_type": "STATE_TRANSITION",
       "severity": "INFO",
-      "subsystem": "GATE",
-      "description": "Gate transitioned from CLOSING to CLOSED",
+      "subsystem": "LANDER",
+      "description": "Operating mode changed from STANDBY to ACTIVE",
       "details": {
-        "prev_state": "CLOSING",
-        "new_state": "CLOSED",
-        "closed_limit": true
+        "prev_mode": "STANDBY",
+        "new_mode": "ACTIVE"
       }
     }
   ]
   ```
 
-### 5.8 Query Telemetry History (`GET /api/mission/telemetry/history`)
+### 5.9 Query Telemetry History (`GET /api/mission/telemetry/history`)
 - **Method**: `GET`
 - **Path**: `/api/mission/telemetry/history`
 - **Purpose**: Retrieves historical telemetry samples within the backend's sliding 5-minute window for table display or charts.
@@ -577,37 +597,29 @@ All REST endpoints return JSON with standard HTTP status codes.
       "received_at_epoch": 1792750441.12,
       "timestamp_ms": 8451000,
       "mode": "ACTIVE",
-      "gate_state": "CLOSED",
-      "closed_limit": 1,
-      "open_limit": 0,
       "bmp_temperature_c": null,
       "pressure_hpa": null,
       "dht_temperature_c": 24.5,
       "humidity_pct": 45.0,
       "bmp280_ok": 0,
-      "dht11_ok": 1,
-      "fault": null
+      "dht11_ok": 1
     }
   ]
   ```
-  *(Note: In the SQLite response, boolean flags like `bmp280_ok` and limits are integers `1` / `0` / `null`).*
+  *(Note: In the SQLite response, boolean flags like `bmp280_ok` and `dht11_ok` are integers `1` / `0` / `null`).*
 
-### 5.9 Reset Mission Demo Session (`POST /api/mission/session/reset`)
+### 5.10 Reset Mission Demo Session (`POST /api/mission/session/reset`)
 - **Method**: `POST`
 - **Path**: `/api/mission/session/reset`
-- **Purpose**: Exhibition reset button. Clears commands, events, and telemetry from SQLite; resets physical gate state in memory to `UNKNOWN`. **Preserves active connection states (`gateway_state`, `device_state`)** so live hardware is not falsely marked offline.
+- **Purpose**: Exhibition reset button. Clears commands, events, and telemetry from SQLite; resets mission mode and sensor health in memory. **Preserves active connection states (`gateway_state`, `device_state`)** so live hardware is not falsely marked offline.
 - **Request Body**: None.
 - **Response (`200 OK`)**:
   ```json
   {
     "status": "session_reset",
-    "message": "Demo session data cleared. Gate state initialized as UNKNOWN.",
+    "message": "Demo session data cleared. Device and sensor state are awaiting fresh telemetry.",
     "mission_state": {
       "mode": "UNKNOWN",
-      "gate_state": "UNKNOWN",
-      "closed_limit": null,
-      "open_limit": null,
-      "fault": null,
       "last_telemetry_at": null,
       "updated_at": "2026-10-23T10:16:00.000000+00:00",
       "gateway_state": "ONLINE",
@@ -621,6 +633,7 @@ All REST endpoints return JSON with standard HTTP status codes.
       "simulation_mode": false
     }
   }
+  ```
   ```
 
 ---
@@ -642,10 +655,6 @@ Sent immediately on connection, after state transitions, or after session reset.
   "type": "state_snapshot",
   "data": {
     "mode": "ACTIVE",
-    "gate_state": "CLOSED",
-    "closed_limit": true,
-    "open_limit": false,
-    "fault": null,
     "last_telemetry_at": "2026-10-23T10:14:02.124581+00:00",
     "updated_at": "2026-10-23T10:14:02.124581+00:00",
     "gateway_state": "ONLINE",
@@ -662,7 +671,7 @@ Sent immediately on connection, after state transitions, or after session reset.
 ```
 
 #### Message Type 2: `telemetry`
-Broadcast on every received live telemetry tick (approx. 1 Hz when device is `ONLINE`).
+Broadcast on every received live telemetry tick (approx. 1 Hz when lander is `ONLINE`).
 ```json
 {
   "type": "telemetry",
@@ -670,24 +679,16 @@ Broadcast on every received live telemetry tick (approx. 1 Hz when device is `ON
     "type": "telemetry",
     "timestamp_ms": 8453000,
     "mode": "ACTIVE",
-    "gate_state": "CLOSED",
-    "closed_limit": true,
-    "open_limit": false,
     "bmp_temperature_c": null,
     "pressure_hpa": null,
     "dht_temperature_c": 24.5,
     "humidity_pct": 45.0,
     "bmp280_ok": false,
     "dht11_ok": true,
-    "fault": null,
     "received_at": "2026-10-23T10:14:03.120000+00:00"
   },
   "state": {
     "mode": "ACTIVE",
-    "gate_state": "CLOSED",
-    "closed_limit": true,
-    "open_limit": false,
-    "fault": null,
     "last_telemetry_at": "2026-10-23T10:14:03.120000+00:00",
     "updated_at": "2026-10-23T10:14:03.120000+00:00",
     "gateway_state": "ONLINE",
@@ -703,14 +704,35 @@ Broadcast on every received live telemetry tick (approx. 1 Hz when device is `ON
 }
 ```
 
-#### Message Type 3: `command_update`
+#### Message Type 3: `rover_telemetry`
+Broadcast on rover telemetry updates received from the UDP stream or simulator.
+```json
+{
+  "type": "rover_telemetry",
+  "rover": {
+    "rover_id": "mars-rover-01",
+    "distance_cm": 145.0,
+    "pitch_deg": 12.4,
+    "roll_deg": -3.2,
+    "command": "F",
+    "mode": "M",
+    "connection_state": "ONLINE",
+    "last_seen": "2026-10-23T10:14:03.120000+00:00",
+    "source": "simulator",
+    "obstacle_detected": false,
+    "event": null
+  }
+}
+```
+
+#### Message Type 4: `command_update`
 Broadcast when a command is accepted and submitted.
 ```json
 {
   "type": "command_update",
   "command": {
     "command_id": "9d4f0d38-6f68-466d-8687-8849b2533ca9",
-    "name": "OPEN_GATE",
+    "name": "SET_ACTIVE",
     "status": "ACKNOWLEDGED",
     "created_at": "2026-10-23T10:15:30.100000+00:00",
     "acknowledged_at": "2026-10-23T10:15:30.250000+00:00",
@@ -734,22 +756,30 @@ To maintain the WebSocket connection through reverse proxies or browser idle tim
 
 ## 7. Telemetry Contract & Data Dictionary
 
-### Telemetry Field Specification (`msg.telemetry`)
+### Lander Telemetry Field Specification (`msg.telemetry`)
 | Field Name | Type | Nullable | Units / Allowed Values | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `timestamp_ms` | `integer` | No | Milliseconds (ms) | **ESP32 microcontroller `millis()` uptime**. Wraps at ~49.7 days; resets to 0 on reboot. |
 | `received_at` | `string` | No | ISO 8601 (UTC) | **Host-side receipt timestamp**. Used for display and time-ordering. |
 | `mode` | `string` | No | `"ACTIVE"`, `"STANDBY"` | Current ESP32 operating mode. |
-| `gate_state` | `string` | No | `"UNKNOWN"`, `"CLOSED"`, `"OPEN"`, `"OPENING"`, `"CLOSING"`, `"FAULT"` | Physical gate position. |
-| `closed_limit` | `boolean` | No | `true` / `false` | Physical limit switch contact at closed position. |
-| `open_limit` | `boolean` | No | `true` / `false` | Physical limit switch contact at open position. |
 | `bmp_temperature_c`| `number` | **Yes** | Degrees Celsius (°C) | Barometric sensor temperature. `null` if sensor disconnected or failed. |
 | `pressure_hpa` | `number` | **Yes** | Hectopascals (hPa) | Barometric pressure. `null` if sensor disconnected or failed. |
 | `dht_temperature_c`| `number` | **Yes** | Degrees Celsius (°C) | 1-wire digital sensor temperature. `null` if sensor disconnected or failed. |
 | `humidity_pct` | `number` | **Yes** | Percent (%) | Relative humidity. `null` if sensor disconnected or failed. |
 | `bmp280_ok` | `boolean` | No | `true` / `false` | BMP280 hardware health status. |
 | `dht11_ok` | `boolean` | No | `true` / `false` | DHT11 hardware health status. |
-| `fault` | `string` | **Yes** | Code string or `null` | Latched fault code (e.g. `"FAULT_OPEN_TIMEOUT"`). |
+
+### Rover Telemetry Field Specification (`msg.rover`)
+| Field Name | Type | Nullable | Units / Allowed Values | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `rover_id` | `string` | No | string (`"mars-rover-01"`) | Identifier for the rover unit. |
+| `distance_cm` | `number` | **Yes** | 0 to 400 cm | HC-SR04 ultrasonic rangefinder obstacle distance. |
+| `pitch_deg` | `number` | **Yes** | -90.0 to 90.0 degrees | MPU6050 attitude pitch angle. |
+| `roll_deg` | `number` | **Yes** | -90.0 to 90.0 degrees | MPU6050 attitude roll angle. |
+| `command` | `string` | **Yes** | `"F"`, `"B"`, `"L"`, `"R"`, `"S"` | Current motion command (Forward, Back, Left, Right, Stop). |
+| `mode` | `string` | **Yes** | `"M"`, `"A"` | Rover control mode (Manual or Autonomous). |
+| `connection_state` | `string` | No | `"ONLINE"`, `"OFFLINE"` | Independent rover link health based on UDP packet arrival. |
+| `obstacle_detected` | `boolean`| **Yes** | `true` / `false` | Indicates whether distance is below obstacle safety threshold (< 30 cm). |
 
 ### The Critical Timestamp Distinction
 > [!IMPORTANT]
@@ -768,13 +798,11 @@ To maintain the WebSocket connection through reverse proxies or browser idle tim
 ## 8. Command Submission & Lifecycle
 
 ### Supported Commands
-| Command Name | Description | Required Gate State | Limits Required |
+| Command Name | Description | Preconditions | Effect |
 | :--- | :--- | :--- | :--- |
-| `OPEN_GATE` | Actuates servos toward open position | `CLOSED` | `closed_limit: true`, `open_limit: false` |
-| `CLOSE_GATE` | Actuates servos toward closed position | `OPEN` | `open_limit: true`, `closed_limit: false` |
-| `GET_STATUS` | Non-movement status snapshot query | Any state | None (safe query) |
-| `SET_ACTIVE` | Wakes lander to ACTIVE operating mode | Any state | None |
-| `SET_STANDBY` | Places lander in low-power STANDBY mode | Any state | Inactive limit switches |
+| `GET_STATUS` | Non-intrusive status query | Gateway must be `ONLINE` | Requests fresh status and mode from lander |
+| `SET_ACTIVE` | Transitions lander to ACTIVE mode | Gateway must be `ONLINE` | Starts sensor polling (2s) and telemetry streaming (1 Hz) |
+| `SET_STANDBY` | Transitions lander to STANDBY mode | Gateway must be `ONLINE` | Pauses sensor polling; holds link available |
 
 ### Command State Machine
 ```
@@ -790,27 +818,23 @@ To maintain the WebSocket connection through reverse proxies or browser idle tim
      |  SENT   | --------(Device rejects or Safety violation)--------> [ REJECTED ]
      +---------+
           |
-          | (ESP32 acknowledges request)
+          | (ESP32 acknowledges request over Wi-Fi TCP)
           v
    +--------------+
    | ACKNOWLEDGED | --------(Timeout / Movement fails)-----------------> [ TIMED_OUT / FAILED ]
    +--------------+
           |
-          | (Authoritative limit switch triggers verified endpoint)
+          | (Mode change or status response confirmed)
           v
     +-----------+
     | COMPLETED |
     +-----------+
 ```
 
-### Acknowledgement ≠ Completion
-- An HTTP response of `accepted: true` and status `ACKNOWLEDGED` confirms **only** that the lander validated and accepted the instruction.
-- Physical completion is confirmed **solely** when limit switches signal `OPEN` or `CLOSED` via telemetry or status.
-- For movement commands, the UI must keep controls gated and display in-flight progress until `COMPLETED` is confirmed.
-
-### Movement Retry Prohibition
-- Automatic retries for `OPEN_GATE` or `CLOSE_GATE` are **strictly prohibited** by safety regulations.
-- If a command times out (`TIMED_OUT`), the operator must manually inspect the gate or issue a `GET_STATUS` query before attempting any further movement.
+### Acknowledgement & Verification
+- An HTTP response of `accepted: true` confirms that the gateway received and dispatched the command.
+- Status transitions to `ACKNOWLEDGED` when the ESP32 lander acknowledges the command over the Wi-Fi TCP stream.
+- Transition to `COMPLETED` occurs when the confirmed mode status (`mode_status` or `status`) is reported by the device.
 
 ---
 
@@ -832,18 +856,27 @@ To maintain the WebSocket connection through reverse proxies or browser idle tim
    | (ONLINE / STALE /       |               | (ONLINE / STALE /       |
    |  OFFLINE / NOT_CONN)    |               |  OFFLINE / NOT_CONN)    |
    +-------------------------+               +-------------------------+
+                |
+                v (UDP 5005)
+   +-------------------------+
+   |       Mars Rover        |
+   |    connection_state     |
+   |   (ONLINE / OFFLINE)    |
+   +-------------------------+
 ```
-A reachable Raspberry Pi does **NOT** imply a connected or functional ESP32 lander. The UI must render separate status pills for each component.
+A reachable Raspberry Pi does **NOT** imply a connected or functional ESP32 lander or rover. The UI must render separate, independent status badges for Gateway, Lander, and Rover.
 
 ### Staleness & Freshness Thresholds
-- **Telemetry Freshness (UI Live Indicator)**:
+- **Lander Telemetry Freshness (UI Live Indicator)**:
   `age = Date.now() - new Date(received_at).getTime()`
   - **Live**: `age < 5.0 seconds` AND `device_state === 'ONLINE'`.
   - **Historical / Stale**: `age >= 5.0 seconds` OR `device_state !== 'ONLINE'`.
 - **Backend Connection Staleness Evaluator**:
   - `stale_threshold_s` = `3.0s`: Evaluated against elapsed time since `last_device_telemetry_at` (for `device_state`) and `last_gateway_heartbeat_at` (for `gateway_state`). Transitions an `ONLINE` state to `STALE`.
   - `offline_threshold_s` = `10.0s`: Evaluated against elapsed time since `last_device_telemetry_at` and `last_gateway_heartbeat_at`. Transitions the subsystem to `OFFLINE`.
-  - **Endpoint Safety Invalidation**: An `OFFLINE` transition for either `device_state` or `gateway_state` automatically forces physical `gate_state` to `UNKNOWN` to prevent blind actuation. When `gateway_state` becomes `OFFLINE`, `device_state` also cascades to `OFFLINE`.
+  - When `gateway_state` becomes `OFFLINE`, `device_state` also cascades to `OFFLINE`.
+- **Rover Staleness**:
+  - Rover UDP packets are sent at ~5 Hz. If no valid packet arrives within `2.0 seconds` (`ROVER_OFFLINE_TIMEOUT_S`), the rover `connection_state` transitions to `OFFLINE`. Stored readings are preserved with explicit offline indicators.
 
 ---
 
@@ -867,7 +900,7 @@ let currentState = {
   simulation_mode: false,
   gateway_state: 'NOT_CONNECTED',
   device_state: 'NOT_CONNECTED',
-  gate_state: 'UNKNOWN',
+  mode: 'UNKNOWN',
   updated_at: null,
 };
 
@@ -924,7 +957,7 @@ function applyMissionState(stateData) {
 
   currentState = { ...currentState, ...stateData };
   renderHeaderBadges(currentState);
-  renderGateControls(currentState);
+  renderModeControls(currentState);
 }
 
 // 5. Telemetry Rendering
@@ -995,6 +1028,8 @@ function initWebSocket() {
       } else if (msg.type === 'telemetry') {
         if (msg.state) applyMissionState(msg.state);
         if (msg.telemetry) renderTelemetry(msg.telemetry);
+      } else if (msg.type === 'rover_telemetry') {
+        if (msg.rover) renderRoverTelemetry(msg.rover);
       }
     } catch (e) {
       console.error('Failed to parse WS payload:', e);
@@ -1010,13 +1045,15 @@ function initWebSocket() {
 // 8. REST Polling Fallback
 async function pollMissionData() {
   try {
-    const [resState, resCmds, resEvents, resTelem] = await Promise.all([
+    const [resState, resRover, resCmds, resEvents, resTelem] = await Promise.all([
       fetch(`${CONFIG.httpBase}/api/mission/state`),
+      fetch(`${CONFIG.httpBase}/api/rover/status`),
       fetch(`${CONFIG.httpBase}/api/mission/commands`),
       fetch(`${CONFIG.httpBase}/api/mission/events`),
       fetch(`${CONFIG.httpBase}/api/mission/telemetry/history`),
     ]);
     if (resState.ok) applyMissionState(await resState.json());
+    if (resRover.ok) renderRoverTelemetry(await resRover.json());
     // Render commands, events, and telemetry tables from responses...
   } catch (err) {
     console.warn('Poll failed:', err);
@@ -1039,19 +1076,17 @@ Every frontend implementation or replacement must strictly abide by these rules:
 2. **Strict Interface Boundary**:
    The documented FastAPI backend is the sole interface boundary. Frontend engineers **must not** modify backend routes, change serial framing, alter firmware, or connect directly to the Raspberry Pi gateway.
 3. **Physical Hardware is the Sole Truth**:
-   - The initial gate state is **always** `UNKNOWN`.
-   - Never assume the gate is `CLOSED` or `OPEN` purely because the page loaded or refreshed.
-   - Limit switches confirm endpoints, not operator command submissions.
-4. **Control Gating & Interlocks**:
-   - Disable `OPEN_GATE` unless `gate_state === 'CLOSED'` and both gateway/device are `ONLINE`.
-   - Disable `CLOSE_GATE` unless `gate_state === 'OPEN'` and both gateway/device are `ONLINE`.
-   - Disable all movement if `fault !== null`, if gate state is `UNKNOWN`, or while a command is in-flight.
+   - Initial lander mode is `UNKNOWN` until confirmed by fresh telemetry or status query.
+   - Command acknowledgement confirms request reception; device-reported mode confirms state.
+4. **Command Gating**:
+   - Disable command submission buttons if the Raspberry Pi gateway is not `ONLINE`.
+   - Disable submission while a previous command is in-flight.
 5. **Never Fabricate Sensor Readings**:
    - When sensors fail, display `--`. Do not substitute `0` or keep frozen previous numbers.
-6. **No Automatic Movement Commands**:
-   - Never issue `OPEN_GATE` or `CLOSE_GATE` automatically on page load, WebSocket connect, or reconnect.
-7. **No Automatic Movement Retries**:
-   - If a movement command fails or times out, display the failure to the user. Do not program automatic retry loops.
+6. **No Automatic Commands**:
+   - Never issue hardware commands automatically on page load, WebSocket connect, or reconnect.
+7. **Subsystem Isolation**:
+   - A failure in one subsystem (e.g. BMP280 failure or rover disconnect) must never crash the UI or disrupt the other telemetry feeds.
 8. **Explicit Simulation Warning**:
    - When `simulation_mode === true`, the dashboard must display a prominent amber banner: `⚠ SIMULATOR DATA — NOT HARDWARE`.
 
@@ -1073,20 +1108,21 @@ Use this mandatory acceptance checklist:
   - Clocks and event timestamps display in **Indian Standard Time (IST, UTC+05:30)** using 24-hour `hourCycle: 'h23'` format (`HH:mm:ss`).
 - [ ] **Live Telemetry Stream**: Telemetry ticks increment smoothly at 1 Hz without UI stutter, flashing DOM rebuilds, or dropped frames.
 - [ ] **Sensor Failure Presentation**: When synthetic sensors are null or report failure (`bmp280_ok: false`), values render as `--` and health badges show `FAILED`.
-- [ ] **Safety Interlocks & Gate State Transitions**:
-  - Initial state defaults to `UNKNOWN`; `OPEN_GATE` and `CLOSE_GATE` buttons are strictly disabled.
-  - Executing `OPEN_GATE` (when `CLOSED`) animates/transitions through `OPENING` for 3 discrete seconds before arriving at `OPEN`.
-  - Executing `CLOSE_GATE` (when `OPEN`) animates/transitions through `CLOSING` for 3 discrete seconds before arriving at `CLOSED`.
-  - Buttons are dynamically disabled while movement commands are in-flight or if an active fault exists.
+- [ ] **Operating Mode Transitions**:
+  - Initial mode defaults to `UNKNOWN`; transitions cleanly to `ACTIVE` or `STANDBY` on command dispatch.
+  - In `STANDBY`, sensor polling is paused and telemetry renders `--` with appropriate status badges.
+- [ ] **Rover Telemetry Streaming**:
+  - Live `rover_telemetry` messages render distance, pitch, roll, command, mode, and obstacle detection accurately.
+  - Disconnecting rover stream marks rover `OFFLINE` without breaking lander telemetry.
 - [ ] **Command Lifecycle & Error Handling**:
   - Valid commands transition cleanly through `CREATED` → `SENT` → `ACKNOWLEDGED` → `COMPLETED`.
-  - Invalid commands (e.g. invalid transitions) return HTTP 400 Bad Request; UI displays an informative alert and remains operational.
+  - Invalid commands return HTTP 400 Bad Request; UI displays an informative alert and remains operational.
 - [ ] **Network Disconnect & Reconnect**:
   - Stopping the backend server reveals the red `CONNECTION DISRUPTED: RECONNECTING TO MISSION BACKEND...` banner.
   - Restoring the backend automatically clears the warning banner and reconciles current mission state.
 - [ ] **Session Reset**:
-  - Clicking `RESET SESSION` triggers `POST /api/mission/session/reset`, clears history logs, resets gate state to `UNKNOWN`, and maintains active connection status without false disconnect alerts.
-- [ ] **Zero Unsolicited Movement**: Page refreshes, reconnects, and poll cycles never issue unauthorized actuation commands.
+  - Clicking `RESET SESSION` triggers `POST /api/mission/session/reset`, clears history logs, resets mission mode and sensor state to awaiting fresh telemetry, and maintains active connection status without false disconnect alerts.
+- [ ] **Zero Unsolicited Commands**: Page refreshes, reconnects, and poll cycles never issue unauthorized hardware commands.
 
 ### Stage 2: Hardware Promotion Sign-Off
 - [ ] **Simulator Milestone Completed**: All Stage 1 items verified and signed off by frontend lead.

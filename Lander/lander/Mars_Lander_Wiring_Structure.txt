@@ -1,93 +1,50 @@
-MARS LANDER — ESP32 WIRING STRUCTURE
-Version: GPIO Map V1 (proposed)
+MARS LANDER — ESP32 SENSOR AND STATUS WIRING
 Board: ESP32 DevKit V1, ESP32-WROOM-32
-Purpose: Keep lander GPIO assignments consistent across firmware, wiring, and documentation.
+This pin map records the retained sensors, display, and indicators only.
+Verify board/module electrical requirements and physical wiring before power.
 
-IMPORTANT STATUS
-- This is the agreed proposed pin map, not a verified physical wiring diagram.
-- Verify the exact ESP32 board variant and each module's electrical requirements before powering anything.
-- Do not change GPIO assignments without updating this file and the pin definitions at the top of lander.ino.
-- GPIO 21/22 are shared by the LCD and BMP280 on one I2C bus; verify their I2C addresses do not conflict.
-
-1. GPIO ASSIGNMENTS
+GPIO ASSIGNMENTS
 
 Component                 ESP32 GPIO     Connection / Notes
----------------------------------------------------------------------------
-Servo 1 signal            GPIO 18        Signal only; use external servo supply
-Servo 2 signal            GPIO 19        Signal only; use external servo supply
-Physical gate button      GPIO 23        Proposed INPUT_PULLUP wiring
-Open limit switch         GPIO 32        Digital input
-Closed limit switch       GPIO 33        Digital input
-Green status LED          GPIO 25        Output; use suitable series resistor
-Red status LED            GPIO 26        Output; use suitable series resistor
+-----------------------------------------------------------------------
+Green status LED          GPIO 25        Output with series resistor
+Red status LED            GPIO 26        Output with series resistor
 WS2812B data              GPIO 27        Verify logic-level requirements
 BMP280 SDA                GPIO 21        I2C SDA
 BMP280 SCL                GPIO 22        I2C SCL
-20x4 LCD SDA              GPIO 21        Shares I2C bus with BMP280
-20x4 LCD SCL              GPIO 22        Shares I2C bus with BMP280
+20x4 LCD SDA              GPIO 21        Shares bus with BMP280
+20x4 LCD SCL              GPIO 22        Shares bus with BMP280
 DHT11 data                GPIO 17        Digital data input
-Spare / reserved          GPIO 16        Leave unused unless map is updated
-Spare / reserved          GPIO 13        Leave unused unless map is updated
-Spare / reserved          GPIO 14        Leave unused unless map is updated
-Spare / reserved          GPIO 4         Leave unused unless map is updated
 
-2. SHARED I2C BUS
-- SDA: GPIO 21
-- SCL: GPIO 22
-- Connect LCD I2C backpack and BMP280 SDA/SCL to the same bus.
-- Verify their I2C addresses are different.
-- Check module logic-voltage compatibility; do not assume every I2C backpack is safe at 3.3V logic.
+SHARED I2C BUS
+- SDA: GPIO 21; SCL: GPIO 22.
+- Connect the LCD backpack and BMP280 to this bus; verify addresses differ.
+- Check module logic voltage; do not assume every backpack is safe at 3.3V.
 
-3. POWER AND GROUND RULES
-- Do NOT power MG996R servos from the ESP32 3.3V pin.
-- Power both servos from a suitably rated regulated external supply/BEC.
-- Do not route servo current through ordinary breadboard power rails.
-- The WS2812B strip needs a suitable 5V supply sized for the actual strip and brightness.
-- Connect grounds together where required: ESP32, servo supply, and LED-strip supply need a common reference for control signals.
-- Verify the WS2812B data input accepts the ESP32's 3.3V signal; use a suitable level shifter if required.
-- ESP32 GPIOs use 3.3V logic and are not 5V tolerant. Never connect unknown-voltage signals to GPIOs.
+POWER AND ELECTRICAL RULES
+- ESP32 GPIOs use 3.3V logic and are not 5V tolerant.
 - Use suitable series resistors for the green and red indicator LEDs.
-- Avoid powering high-current loads from the ESP32 board regulator.
+- GPIO pins are control signals and must not be used as peripheral power rails.
+- Avoid separate power supplies unless electrical requirements strictly require one.
+- Power low-current sensors (BMP280 < 1mA at 3.3V; DHT11 1-2.5mA at 3.3V/5V) directly from ESP32 dev-board power pins.
+- 20x4 LCD backpack typically requires 5V VIN for backlight/contrast (~20-50mA); I2C SDA/SCL must remain 3.3V logic compatible.
+- WS2812B (30 LEDs on GPIO 27): Full white draws up to 1.8A, but firmware clamps brightness to 60/255 (~150-300mA peak). Connect strip power to 5V/VIN (sharing common ground), never an ESP32 GPIO. Sizing of host USB supply should provide at least 1A-1.5A to handle ESP32 Wi-Fi bursts plus LEDs.
+- Status LEDs (GPIO 25 green, GPIO 26 red) draw ~5-10mA through series current-limiting resistors.
+- Share ground references across all peripherals and power supplies.
+- The ESP32 needs a stable power source (USB or VIN) even though Wi-Fi removes its operational data cable to the Pi.
+- GPIOs 6–11 are connected to flash on classic ESP32-WROOM-32 boards.
+- GPIOs 34–39 are input-only; check boot-strapping behavior before use.
 
-4. INPUT WIRING (PROPOSED)
-- Physical button: proposed INPUT_PULLUP configuration; connect switch between GPIO 23 and GND. Pressed reads LOW; released reads HIGH.
-- Limit-switch NO/NC contacts must be selected based on the actual switches and final safety design.
-- Do not assume limit-switch HIGH/LOW meaning until wiring is confirmed and documented.
-- Debounce the physical button and limit switches as appropriate.
-
-5. FIRMWARE BEHAVIOUR DEPENDENCIES
-- One physical button toggles the gate only when the gate is confirmed OPEN or CLOSED.
-- Dashboard uses explicit OPEN_GATE and CLOSE_GATE commands.
-- Reject all new gate movement commands while gate is OPENING or CLOSING; do not queue commands.
-- At startup, read both limit switches:
-  * Closed switch active only -> CLOSED
-  * Open switch active only -> OPEN
-  * Neither active -> UNKNOWN
-  * Both active -> FAULT
-- Do not automatically move the gate at startup.
-- If movement times out without endpoint confirmation, enter FAULT and reject further gate movements until handled.
-- STANDBY: LCD displays STANDBY MODE; WS2812B strip remains illuminated; physical gate button, gate movement, and sensor polling are disabled. USB serial remains available for SET_ACTIVE and GET_STATUS.
-- If STANDBY is requested during gate movement, finish movement and confirm endpoint before entering STANDBY.
-- ACTIVE LCD rotation is approximately every 6 seconds:
-  1. Lander/gate status
-  2. BMP280 temperature and pressure
-  3. DHT11 temperature and humidity
-  4. Rover/drone status and USB link status
-- Dashboard displays both temperatures, pressure, humidity, gate state, and switch states simultaneously.
-- WS2812B uses a slow, colourful space-themed animation and remains on in ACTIVE and STANDBY.
-
-6. BOARD CAUTIONS
-- GPIOs 6-11 are typically connected to SPI flash on classic ESP32-WROOM-32 boards; do not use them for peripherals.
-- GPIOs 34-39 are input-only; do not assign outputs to them.
-- Avoid boot-strapping pins unless their startup behaviour has been checked.
-- This map assumes the classic ESP32-WROOM-32 DevKit V1. Recheck if the board variant differs.
-
-7. CHANGE CONTROL
-If any GPIO changes:
-1. Update this file.
-2. Update pin constants at the top of lander.ino.
-3. Update physical wiring and component labels.
-4. Update team documentation.
-5. Re-test startup, gate movement, limit switches, sensors, LEDs, and serial communication.
+FIRMWARE BEHAVIOR
+- Lander telemetry and status/mode commands use newline-delimited JSON over a
+  Wi-Fi TCP connection initiated by the ESP32 to the Pi (default port 5006).
+- USB serial remains available at 115200 8N1 for programming/debug only; the
+  Pi does not open it.
+- ACTIVE mode polls BMP280 and DHT11; failed readings are sent as null.
+- STANDBY pauses sensor polling; GET_STATUS and mode commands remain available.
+- LCD rotates lander status, BMP280 readings, DHT11 readings, and Wi-Fi link status.
+- Green indicates ACTIVE; WS2812B retains the space-themed animation.
+- The retired ramp, servos, physical button, and limit switches are not part of
+  the lander wiring or firmware.
 
 END OF FILE

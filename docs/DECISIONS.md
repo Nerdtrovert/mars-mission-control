@@ -12,26 +12,34 @@
 | :--- | :--- | :--- | :--- | :--- |
 | **ADR-001** | Mission Backend Host | MacBook (macOS) | `accepted` | Centralizes mission coordination, SQLite telemetry logging, dashboard hosting, and TV HDMI output. |
 | **ADR-002** | Hardware Edge Gateway | Raspberry Pi 4 | `accepted` | Edge gateway directly connected to ESP32 via USB serial; exposes HTTP and WebSocket APIs. |
-| **ADR-003** | Physical Control & Safety | ESP32 Microcontroller | `accepted` | Dedicated embedded controller for GPIOs, servo PWM, limit switches, and local safety interlocks. |
+| **ADR-003** | Physical Control & Safety | ESP32 Microcontroller | `superseded` | Its ramp actuator scope is retired by ADR-023; sensor and status ownership remains. |
 | **ADR-004** | MacBook ↔ Pi Communication | HTTP + WebSocket (JSON) | `accepted` | HTTP for command dispatch and request-response; WebSocket for live telemetry streaming. |
 | **ADR-005** | Pi ↔ ESP32 Communication | USB Serial (115200 8N1), newline-delimited JSON | `accepted` | Robust, framed serial protocol. Single-process ownership prevents port contention. |
 | **ADR-006** | Historical Telemetry & State Storage | SQLite on MacBook | `accepted` | Embedded, zero-configuration local relational database suitable for exhibition workloads without external services. |
 | **ADR-007** | In-Memory Telemetry Retention | 5-minute sliding window | `accepted` | Memory-bounded live telemetry cache for immediate UI charting, backed by persistent SQLite storage. |
-| **ADR-008** | Initial & Restart Gate State | Reverts to `UNKNOWN` | `accepted` | Ground truth belongs strictly to physical limit switches. Never infer endpoint position across reboots or disconnects. |
+| **ADR-008** | Initial & Restart Gate State | Reverts to `UNKNOWN` | `superseded` | Historical actuator state; ADR-023 removes gate state and preserves unknown device/sensor state on loss. |
 | **ADR-009** | Reconnection Recovery Behavior | Refresh status via `GET_STATUS`; zero automatic movement | `accepted` | Re-establishes link and queries fresh switch readings. Never commands physical motion on reconnect. |
-| **ADR-010** | Movement Command Retries | Strictly disabled | `accepted` | Prohibits blind retries of `OPEN_GATE` or `CLOSE_GATE` to prevent mechanical jamming and race conditions. |
-| **ADR-011** | ESP32 Firmware Baseline | Freeze `v1.3.1-esp32-baseline` | `accepted` | Stable baseline in `Lander/lander/lander.ino`. No ad-hoc firmware rewriting. |
+| **ADR-010** | Movement Command Retries | Strictly disabled | `superseded` | Actuator movement commands were retired by ADR-023; generic no-blind-retry rule remains in AGENTS.md. |
+| **ADR-011** | ESP32 Firmware Baseline | `v1.3.1-esp32-baseline` reference | `superseded` | User-authorized ADR-023 updates current firmware while retaining this historical baseline reference. |
 | **ADR-012** | Exhibition Display Output | TV via direct HDMI from MacBook | `accepted` | Passive display sink connected via HDMI; not a participant in local network communication. |
 | **ADR-013** | Network Environment | Private Local Wi-Fi / Ethernet | `accepted` | Core telemetry, command relay, and mission state must operate completely offline without public internet. |
-| **ADR-014** | Gateway API Contract Spec | `/health`, `/api/devices`, `/api/lander/status`, `/api/commands`, `/ws/telemetry` | `accepted` | Standard REST/WS gateway interface specifications implemented in `app/communication/gateway_contract.py` and `docs/api-contract.md`. |
-| **ADR-015** | Command Lifecycle States | `CREATED` → `SENT` → `ACKNOWLEDGED` → `COMPLETED` / `FAILED` / `REJECTED` / `TIMED_OUT` | `accepted` | Explicit command state machine separating device receipt acknowledgement from physical switch confirmation in `app/mission/command.py`. |
+| **ADR-014** | Gateway API Contract Spec | Gateway HTTP and WebSocket endpoints | `superseded` | Updated lander and rover contracts are documented in `docs/api-contract.md` under ADR-023. |
+| **ADR-015** | Command Lifecycle States | `CREATED` → `SENT` → `ACKNOWLEDGED` → terminal state | `superseded` | Actuator completion reconciliation is retired; current status/mode command lifecycle is documented by ADR-023. |
 | **ADR-016** | Hardware-Free Simulator Separation | In-memory `GatewaySimulator` with deterministic step clock | `accepted` | Isolated development simulator in `app/communication/gateway_simulator.py`. Never masquerades as real hardware in production. |
 | **ADR-017** | Lifespan Background Simulator & Staleness Loop | `SimulatorRunner` managed via FastAPI `lifespan` | `accepted` | Starts and stops continuous background telemetry streaming and staleness checks cleanly without leaking tasks or mutating read-only snapshots. |
-| **ADR-018** | Gateway-Boundary Request ID Mapping & Reconciliation | `RequestIdMapper` at serial boundary + telemetry endpoint reconciliation | `accepted` | Maps MacBook UUID command_ids to ESP32 32-bit integer request_ids; reconciles lost-ACK movement commands only via confirmed endpoint telemetry; blocks duplicate/conflicting movement. |
-| **ADR-019** | Raspberry Pi Hardware Gateway Daemon | Standalone FastAPI service in `gateway/` with `SerialManager`, `RequestIdMapper`, and broadcast WebSocket | `accepted` | Exposes `/health`, `/api/devices`, `/api/lander/status`, `/api/commands`, `/ws/telemetry`. Manages serial link (115200 8N1), ROM boot text filtering, and safety on disconnect/reconnect. |
+| **ADR-018** | Gateway-Boundary Request ID Mapping & Reconciliation | Request ID mapping at serial boundary | `superseded` | Mapping remains; movement reconciliation was removed with the actuator commands by ADR-023. |
+| **ADR-019** | Raspberry Pi Hardware Gateway Daemon | Standalone FastAPI service in `gateway/` | `accepted` | Also runs independent rover UDP ingestion on port 5005 as specified by ADR-023. |
 | **ADR-020** | SQLite Persistence, 5-Minute Retention, and Session Reset | `SQLiteStorage` in `app/storage/` with `telemetry`, `mission_events`, and `commands` tables | `accepted` | Thread-safe persistence with WAL mode, deterministic 5-minute sliding retention, event transition deduplication, safe restart without auto-movement, and clean session reset. |
-| **ADR-021** | Exhibition Dashboard UI & Live WebSocket Broadcast | Vanilla HTML5/CSS3/ES6 in `frontend/` + `WS /ws/telemetry` | `accepted` | Zero-dependency, offline-first dashboard served by FastAPI at `/dashboard`. Dark aerospace HUD layout for exhibition TV, strict safety button gating, historical vs live data distinction, automatic WebSocket reconnect with polling fallback. |
+| **ADR-021** | Exhibition Dashboard UI & Live WebSocket Broadcast | Vanilla HTML5/CSS3/ES6 in `frontend/` + `WS /ws/telemetry` | `superseded` | Actuator controls and gate presentation retired. Sensor, rover, reconnect, and polling behavior remain in current dashboard. |
 | **ADR-022** | Real Network Gateway Integration (HTTP REST & Persistent WebSocket) | `GatewayClient` with HTTP & `NetworkGatewayRunner` with WebSocket | `accepted` | Connects MacBook backend to standalone Raspberry Pi gateway daemon over local HTTP (`/health`, `/api/lander/status`, `/api/commands`) and persistent WebSocket (`/ws/telemetry`) with bounded exponential backoff. Preserves in-process simulator mode via `GATEWAY_MODE`. |
+| **ADR-023** | Retired Lander Ramp and Rover Telemetry Contract | Sensor-only lander; Pi UDP rover input on port 5005 | `accepted` | Supersedes actuator-specific decisions below. Keeps lander JSON framing and supported status/mode commands; rover packets are exactly `DIST,PITCH,ROLL,CMD,MODE`. Drone interface remains unspecified. |
+
+> **Current architecture amendment (ADR-023):** The ramp has been removed from
+> the physical design. Older gate, servo, limit-switch, and movement decisions
+> below are historical records and are superseded wherever they conflict with
+> ADR-023. The ESP32 firmware reference baseline is preserved as history; the
+> current source is sensor/status-only. The user explicitly authorized this
+> cleanup, including the baseline firmware update.
 
 ---
 
@@ -50,7 +58,7 @@
 - **Consequences**: The Pi owns the sole USB serial connection to the ESP32.
 
 ### ADR-003: Physical Control & Safety
-- **Status**: `accepted`
+- **Status**: `superseded` (historical; superseded by ADR-023)
 - **Context**: Servo actuation, limit switch debouncing, and emergency cutouts require deterministic real-time response that high-level operating systems cannot guarantee.
 - **Decision**: ESP32 DevKit V1 microcontroller retains sole authority over hardware actuation and local limit interlocks.
 - **Consequences**: Safety interlocks function autonomously even if the Raspberry Pi or MacBook disconnects.
@@ -80,7 +88,7 @@
 - **Consequences**: Bounded memory footprint, instant frontend chart updates, decoupled from long-term SQLite archiving.
 
 ### ADR-008: Initial & Restart Gate State
-- **Status**: `accepted`
+- **Status**: `superseded` (historical; superseded by ADR-023)
 - **Context**: Software restarts or reconnects cannot assume the mechanical gate remained in its prior position.
 - **Decision**: Upon any startup, restart, or communication interruption, physical gate state initializes strictly as `UNKNOWN`.
 - **Consequences**: Software never assumes `CLOSED` or `OPEN` until confirmed by debounced limit switch telemetry or a validated status response.
@@ -92,13 +100,13 @@
 - **Consequences**: Eliminates mechanical collision hazards during network or power transients.
 
 ### ADR-010: Movement Command Retries
-- **Status**: `accepted`
+- **Status**: `superseded` (historical; superseded by ADR-023)
 - **Context**: If a gate movement command times out or drops, blind automatic re-transmission can cause dangerous repeated motor surges or unexpected movement.
 - **Decision**: Automatic movement retries are strictly prohibited until end-to-end command IDs, idempotent duplicate suppression, and verification are implemented and physically tested.
 - **Consequences**: Failures must be flagged explicitly to the human operator; no hidden retry loops.
 
 ### ADR-011: ESP32 Firmware Baseline
-- **Status**: `accepted`
+- **Status**: `superseded` (historical; superseded by ADR-023)
 - **Context**: Firmware development must remain stable so backend and gateway integration targets a known, frozen contract.
 - **Decision**: Firmware baseline is frozen as `v1.3.1-esp32-baseline` (`Lander/lander/lander.ino`).
 - **Consequences**: No casual or unsolicited edits to microcontroller firmware code.
@@ -116,13 +124,13 @@
 - **Consequences**: Core landing and gate actuation demonstrations are fully immune to internet outages.
 
 ### ADR-014: Gateway API Contract Specification
-- **Status**: `accepted`
+- **Status**: `superseded` (historical; superseded by ADR-023)
 - **Context**: Defining standard interface contract between MacBook backend and Raspberry Pi gateway.
 - **Decision**: Formalized in `app/communication/gateway_contract.py` and `docs/api-contract.md`. Exposes `GET /health`, `GET /api/devices`, `GET /api/lander/status`, `POST /api/commands`, and `WS /ws/telemetry`.
 - **Consequences**: Gateway simulator and MacBook backend client use identical Pydantic schemas.
 
 ### ADR-015: Command Lifecycle State Machine
-- **Status**: `accepted`
+- **Status**: `superseded` (historical; superseded by ADR-023)
 - **Context**: Need explicit state tracking for operator commands dispatched from MacBook to ESP32.
 - **Decision**: Implemented in `app/mission/command.py`. Lifecycle: `CREATED` → `SENT` → `ACKNOWLEDGED` → `COMPLETED` (or `FAILED` / `REJECTED` / `TIMED_OUT` / `UNKNOWN`). Distinguishes gateway/microcontroller acknowledgement from mechanical limit switch confirmation.
 - **Consequences**: Clear audit trail for command execution, duplicate suppression, and safety validation.
@@ -140,7 +148,7 @@
 - **Consequences**: Active server execution automatically streams telemetry and detects disconnect/staleness, while testing can advance step-clocks deterministically.
 
 ### ADR-018: Gateway-Boundary Request ID Mapping & Telemetry Reconciliation
-- **Status**: `accepted`
+- **Status**: `superseded` (historical; superseded by ADR-023)
 - **Context**: The MacBook backend tracks commands using UUID strings, but the frozen ESP32 firmware strictly requires 32-bit positive integer `request_id`s (`int32_t`). Furthermore, lost serial acknowledgements must not cause blind movement retries or strand commands when the physical movement actually succeeds.
 - **Decision**: Implemented `RequestIdMapper` at the gateway boundary in `app/communication/request_mapper.py` for thread-safe bidirectional allocation. Commands with lost acknowledgements remain in `SENT` or `TIMED_OUT` and can be reconciled to `COMPLETED` strictly if fresh, non-stale telemetry confirms arrival at the target endpoint (`OPEN_GATE` requires `gate_state == OPEN` and `open_limit == True`). Unresolved or conflicting movement commands strictly block subsequent movement until status reconciliation resolves physical state.
 - **Consequences**: Avoids sending incompatible string IDs to the ESP32. Prohibits blind movement retries. Explicitly recognizes that the frozen ESP32 firmware lacks an on-chip deduplication cache, so end-to-end exactly-once execution is not claimed.
@@ -151,13 +159,14 @@
 - **Decision**: Implemented standalone edge gateway in `gateway/`:
   - `gateway/config.py`: Environment-driven configuration (`GATEWAY_SERIAL_PORT`, baud rate, timeouts).
   - `gateway/transport.py`: `SerialTransport` abstraction supporting `PySerialTransport` (physical serial) and `SimulatedSerialTransport` (in-memory queues for hardware-free testing).
-  - `gateway/serial_manager.py`: Manages serial line framing, background reader/staleness tasks, filters non-JSON bootloader ROM text without crashing, integrates `RequestIdMapper` at serial boundary, tracks ESP32 state (`ONLINE`, `STALE`, `OFFLINE`, `NOT_CONNECTED`), and reverts physical gate state strictly to `UNKNOWN` when disconnected.
-  - `gateway/ws_manager.py`: `WebSocketBroadcaster` broadcasting 1 Hz telemetry and asynchronous `gate_status` events to clients, pruning disconnected clients without interrupting serial ingestion.
+  - `gateway/serial_manager.py`: Manages serial line framing, background reader/staleness tasks, filters non-JSON bootloader ROM text without crashing, integrates `RequestIdMapper` at serial boundary, and tracks ESP32 state (`ONLINE`, `STALE`, `OFFLINE`, `NOT_CONNECTED`).
+  - `gateway/rover_udp.py`: Receives and validates rover GUI datagrams on UDP 5005, tracks last valid receipt, and broadcasts online/offline updates. `gateway.main` starts and stops this receiver beside the serial manager.
+  - `gateway/ws_manager.py`: `WebSocketBroadcaster` broadcasting lander telemetry and rover UDP status updates to clients, pruning disconnected clients without interrupting serial ingestion.
   - `gateway/routes.py` & `gateway/main.py`: Standalone FastAPI application with lifespan management exposing `GET /health`, `GET /api/devices`, `GET /api/lander/status`, `POST /api/commands`, and `WS /ws/telemetry`.
-- **Consequences**: Gateway runs as a standalone service directly testable on macOS without hardware or deployed to the physical Raspberry Pi. Disconnection immediately invalidates gate state to `UNKNOWN`. Reconnection strictly queries fresh status via `GET_STATUS` and never triggers automatic movement. Zero blind retries.
+- **Consequences**: Gateway runs as a standalone service directly testable on macOS without hardware or deployed to the physical Raspberry Pi. Disconnection clears cached device/sensor state. Reconnection queries fresh status via `GET_STATUS`; it issues no physical action.
 
 ### ADR-021: Mission Control Exhibition Dashboard Architecture, Offline-First Strategy, and Live Broadcast
-- **Status**: `accepted`
+- **Status**: `superseded` (historical; superseded by ADR-023)
 - **Context**: Need a responsive, high-contrast mission dashboard view for the exhibition display TV (connected to MacBook over HDMI) and operator console on private Wi-Fi. It must work completely offline without CDN dependencies, distinguish live telemetry from historical/cached data, enforce physical safety gating on actuation buttons, provide an audit log of commands and transitions, and gracefully handle WebSocket disconnects with automatic polling fallback.
 - **Decision**:
   - **Zero-Dependency Vanilla Frontend**: Implemented in `frontend/` (`index.html`, `css/dashboard.css`, `js/dashboard.js`). No external npm, webpack, or CDN scripts/styles. Served directly by FastAPI via `StaticFiles(directory="frontend")` and route `GET /dashboard`.
@@ -181,6 +190,23 @@
   - **Network-Capable `GatewayClient`**: Extended [`backend/app/communication/gateway_client.py`](file:///Users/prajwalnavadagp/Engineering/mars-mission-control/backend/app/communication/gateway_client.py) with zero-dependency synchronous HTTP requests (`urllib.request`) for `check_gateway_health()` (`GET /health`), `refresh_device_status()` (`GET /api/lander/status`), and `dispatch_command()` (`POST /api/commands`).
   - **Persistent `NetworkGatewayRunner`**: Implemented [`backend/app/communication/network_runner.py`](file:///Users/prajwalnavadagp/Engineering/mars-mission-control/backend/app/communication/network_runner.py) maintaining a background WebSocket listener (`WS /ws/telemetry`), bounded exponential backoff reconnection (`reconnect_initial_delay_s=1.0` up to `reconnect_max_delay_s=10.0`), periodic health monitoring, and telemetry TTL pruning.
   - **Mode Selection via Environment**: Configured via `GATEWAY_MODE` (`"simulator"` [default] vs `"network"` / `"real"`), `GATEWAY_HTTP_URL` (default `http://127.0.0.1:8001`), and `GATEWAY_WS_URL` (default `ws://127.0.0.1:8001/ws/telemetry`).
-  - **Strict Reconnection & Invariant Safety**: On network link loss, transitions gateway/device to `OFFLINE` and gate state strictly to `UNKNOWN`. Reconnection issues non-movement queries (`GET_STATUS`) only; zero movement commands are ever issued or retried on reconnect.
+  - **Strict Reconnection & Invariant Safety**: On network link loss, transitions gateway/device to `OFFLINE` and clears stale sensor state. Reconnection issues non-movement queries (`GET_STATUS`) only; zero movement commands are ever issued or retried on reconnect.
   - **Thread-Safe `SimulatedSerialTransport`**: Upgraded queue primitives in [`gateway/transport.py`](file:///Users/prajwalnavadagp/Engineering/mars-mission-control/gateway/transport.py) with standard library `queue.Queue` and non-blocking `asyncio.to_thread` calls, enabling multi-threaded cross-loop simulation in real network integration tests.
 - **Consequences**: Enables MacBook Mission Control to talk across private Wi-Fi/Ethernet to the physical Raspberry Pi 4 edge gateway, fully tested using real localhost sockets without physical hardware dependencies.
+
+### ADR-023: Retired Lander Ramp and Rover Telemetry Contract
+- **Status**: `accepted`
+- **Context**: The physical lander ramp and its actuator components have been removed from the design. The rover's current BOM and telemetry interface support only HC-SR04 distance and MPU6050 attitude readings plus reported command/mode; they have no encoders or battery-voltage sensing circuit. A drone transport/schema is not yet defined.
+- **Decision**: Remove ramp-only servo PWM, button, limit-switch logic, movement commands/state/faults, API fields, dashboard controls, and persistence columns. Retain BMP280/DHT11, display, status LEDs, WS2812B, 115200 8N1 framing, and `GET_STATUS`, `SET_ACTIVE`, `SET_STANDBY`. Run the Pi's rover UDP receiver in the existing gateway FastAPI lifecycle on `ROVER_UDP_PORT` (default 5005), separate from the lander serial manager. Validate exactly `DIST`, `PITCH`, `ROLL`, `CMD`, and `MODE`; report offline based on valid packet age and `ROVER_OFFLINE_TIMEOUT_S`. Simulator and network modes expose the same rover status contract. No battery percentage, battery voltage, speed, encoder, or rover command-dispatch behavior is added. Keep drone integration explicitly unimplemented until its owner defines a transport and payload contract.
+- **Consequences**: Historical ADR entries remain as records but their actuator-specific decisions are superseded. SQLite migration retains timestamps, mode, sensor readings, and sensor health while dropping retired actuator columns. Firmware source changes are authorized by this cleanup request; physical compilation/hardware acceptance must be reported separately.
+
+### ADR-024: Wi-Fi Lander Telemetry Architecture and Standalone Gateway Transport
+- **Status**: `accepted`
+- **Context**: The physical USB serial connection between the ESP32 lander controller and Raspberry Pi 4 gateway is replaced by a wireless link over the private local network. Operational serial ingestion on the Pi must be retired while maintaining existing HTTP/WebSocket contracts, rover UDP 5005 ingestion, lander telemetry schemas, and hardware-free testability.
+- **Decision**:
+  - Replaced `SerialTransport` and `SerialManager` in `gateway/` with `LanderTCPTransport` and `LanderManager` listening on `LANDER_TCP_HOST:LANDER_TCP_PORT` (default `0.0.0.0:5006`).
+  - The ESP32 lander initiates a TCP client connection to the Pi gateway over private local Wi-Fi, streaming newline-delimited JSON telemetry at ~1 Hz and receiving status/mode commands (`GET_STATUS`, `SET_ACTIVE`, `SET_STANDBY`).
+  - ESP32 USB serial remains active exclusively for firmware flashing and local development debugging; the Raspberry Pi gateway never opens or contends for the serial port.
+  - Rover UDP receiver on port 5005 is fully preserved in the gateway application lifecycle.
+  - Power architecture: Low-current sensors (BMP280, DHT11) and display (20x4 LCD) are powered safely from ESP32 dev-board rails. WS2812B LED strip (30 LEDs) brightness is strictly capped at 60/255 (~150–300 mA peak) and powered from 5V/VIN (never GPIO). Wi-Fi eliminates the data cable to the Pi, but the ESP32 still requires a stable electrical power supply.
+- **Consequences**: Completely wireless operational link for the lander. Removed `pyserial` dependency from gateway. Preserved all REST, WebSocket, dashboard, and simulator contracts.

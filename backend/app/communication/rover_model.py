@@ -39,21 +39,18 @@ class RoverStatus(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     rover_id: str = "mars-rover-01"
-    distance_cm: Optional[float] = Field(None, ge=0, le=100000)
+    distance_cm: Optional[float] = Field(None, ge=0, le=400)
     pitch_deg: Optional[float] = Field(None, ge=-90, le=90)
     roll_deg: Optional[float] = Field(None, ge=-90, le=90)
     command: Optional[RoverCommand] = None
     mode: Optional[RoverMode] = None
-    battery_voltage_v: Optional[float] = Field(None, ge=0, le=20)
-    # Intentionally null: no validated 3S LiPo voltage-to-capacity curve yet.
-    battery_percentage: Optional[float] = Field(None, ge=0, le=100)
     connection_state: RoverConnectionState = RoverConnectionState.OFFLINE
     last_seen: Optional[str] = None
     source: RoverSource
     obstacle_detected: Optional[bool] = None
     event: Optional[str] = None
 
-    @field_validator("distance_cm", "pitch_deg", "roll_deg", "battery_voltage_v", "battery_percentage")
+    @field_validator("distance_cm", "pitch_deg", "roll_deg")
     @classmethod
     def reject_non_finite(cls, value: Optional[float]) -> Optional[float]:
         if value is not None and not math.isfinite(value):

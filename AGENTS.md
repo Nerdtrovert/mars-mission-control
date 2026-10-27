@@ -11,10 +11,12 @@
 Mars Mission Control is a **local-first college exhibition project** demonstrating a coordinated planetary landing and monitoring mission.
 
 ### System Components
-1. **ESP32 Lander Controller**: Embedded microcontroller managing physical gate actuation, limit safety, status indicators, and environmental sensing.
-2. **Raspberry Pi 4 Hardware Gateway**: Edge gateway managing the USB serial link to the ESP32 and hosting HTTP and WebSocket APIs for the local network.
-3. **MacBook Mission Control**: Central host running the FastAPI backend, mission coordination, SQLite state history, and browser dashboard.
-4. **Exhibition Dashboard TV**: Display connected directly to the MacBook over HDMI showing real-time mission telemetry and system status.
+1. **ESP32 Lander Controller**: Embedded microcontroller managing environmental sensing, display, status indicators, and operating mode.
+2. **Raspberry Pi 4 Hardware Gateway**: Owns the lander Wi-Fi TCP receiver (port 5006) and rover UDP ingestion (port 5005); hosts HTTP and WebSocket APIs.
+3. **MacBook Mission Control**: Central host running the FastAPI backend, mission coordination, SQLite history, and dashboard.
+4. **Exhibition Dashboard TV**: Display connected directly to the MacBook over HDMI showing real-time telemetry and system status.
+5. **Rover ESP32 and Windows GUI**: HC-12 telemetry at 9600 baud reaches a Windows Tkinter GUI, which forwards readings to the Pi over UDP port 5005. The GUI owns the COM port.
+6. **Drone ESP32**: Intended local-network telemetry source; interface details and implementation are not yet defined.
 
 ### Operational Context
 - **Private Local Network**: The system operates entirely over a dedicated local Wi-Fi / wired network. Core device communication, telemetry, command relay, and dashboard display must function without public Wi-Fi or internet access.
@@ -22,7 +24,7 @@ Mars Mission Control is a **local-first college exhibition project** demonstrati
 
 ### Engineering Priority Hierarchy
 When making trade-offs, strictly apply the following priorities in order:
-1. **Physical Safety & Device State Integrity** (Prevent mechanical damage, invalid commands, or unverified movements).
+1. **Physical Safety & Device State Integrity** (Prevent device damage, invalid commands, or unverified state claims).
 2. **Reliability & Recoverability** (Graceful error isolation, safe reconnects, and fault latching).
 3. **Correctness & Testability** (Deterministic behavior, hardware-free testing, complete schema validation).
 4. **Maintainability** (Clear boundaries, explicit type hints, minimal complexity, preserve working code).
@@ -33,25 +35,29 @@ When making trade-offs, strictly apply the following priorities in order:
 ## 2. Non-Negotiable Architecture & Ownership Boundaries
 
 ```
- +------------------+   USB Serial   +-----------------------+   Private Local Wi-Fi   +-----------------------+   HDMI   +--------------------+
+ +------------------+   Local Wi-Fi  +-----------------------+   Private Local Wi-Fi   +-----------------------+   HDMI   +--------------------+
  |   ESP32 Lander   | <============> | Raspberry Pi 4 Gateway| <=====================> |    MacBook Backend    | <======> |   Exhibition TV    |
- | (Frozen Baseline)|  (115200 8N1)  | (Serial + HTTP/WS)    |     (HTTP / WS JSON)    | & Browser Dashboard   |  Video   |     Dashboard      |
+ | (Sensor Firmware)|   (TCP 5006)   |  (TCP + UDP + API)    |     (HTTP / WS JSON)    | & Browser Dashboard   |  Video   |     Dashboard      |
  +------------------+                +-----------------------+                         +-----------------------+          +--------------------+
 ```
 
+Rover ESP32 --HC-12 9600--> Windows Tkinter GUI --UDP 5005--> Raspberry Pi
+Drone ESP32 --local network telemetry--> interface and schema not yet defined
+
 ### Component Boundaries
 - **ESP32 Lander**:
-  - **Owns**: Physical hardware, GPIOs, servo PWM, limit switches, sensor polling, status LEDs, and local safety interlocks.
-  - **Serial Protocol**: Communicates with the Raspberry Pi exclusively over USB serial using newline-delimited JSON at 115200 baud (8N1).
+  - **Owns**: BMP280/DHT11 sensor polling, display, status LEDs, operating mode, and lander hardware state.
+  - **Transport**: Communicates with the Raspberry Pi exclusively over private local Wi-Fi TCP (port 5006) using newline-delimited JSON. USB serial is retained strictly for local programming and development debugging.
   - **Autonomy**: Must function safely regardless of whether the Pi or MacBook backend is connected.
-  - **Baseline**: The firmware is **frozen as `v1.3.1-esp32-baseline`**. Do not modify or rewrite firmware casually.
+  - **Reference**: `v1.3.1-esp32-baseline` is the historical firmware reference. Changes require explicit task authorization and must preserve supported message framing and remaining hardware behavior.
 - **Raspberry Pi 4 (Hardware Gateway)**:
-  - **Owns**: The single physical USB serial connection to the ESP32.
-  - **Responsibilities**: Manages serial reconnection, handles framing, buffers telemetry, validates incoming HTTP commands, and relays messages between the serial bus and the MacBook over HTTP and WebSocket.
-  - **Isolation**: Prevents multiple processes or network clients from contending for the raw serial port.
+  - **Owns**: The Wi-Fi TCP server socket (port 5006) for the lander and the UDP listener (port 5005) for the rover.
+  - **Responsibilities**: Manages Wi-Fi TCP client connections, handles newline framing, buffers telemetry, validates incoming HTTP commands, and relays messages between the devices and the MacBook over HTTP and WebSocket.
+  - **Isolation**: Prevents multiple processes or network clients from contending for device network sockets.
+  - **Rover**: Runs the independent UDP listener on port 5005 in the same application lifecycle; it does not open the Windows COM port or send rover commands.
 - **MacBook (Mission Control Backend & Dashboard)**:
   - **Owns**: High-level mission state coordination, command tracking and dispatch, SQLite mission logging and telemetry archiving, and dashboard client serving.
-  - **Constraint**: **Must NEVER access the ESP32 serial port directly in production.** It communicates exclusively with the Raspberry Pi Gateway over local HTTP/WebSocket.
+  - **Constraint**: Communicates exclusively with the Raspberry Pi Gateway over local HTTP/WebSocket. Never attempts direct hardware connection to the ESP32 in production.
 - **Exhibition TV**:
   - Passive video sink connected via HDMI to the MacBook. Does not participate in device network protocols.
 
@@ -65,8 +71,8 @@ Do not shift responsibilities across these boundaries without explicit explanati
 The repository already contains a working FastAPI application structure:
 - `backend/app/main.py`: FastAPI application entrypoint.
 - `backend/app/api/routes.py`: API endpoints (including `/api/mission/state`).
-- `backend/app/mission/state.py`: Thread-safe `MissionStateManager` tracking system mode, gate state, limits, and faults.
-- `backend/app/telemetry/processor.py`: JSON line parsing and validation against `TELEMETRY_FIELDS`, `VALID_MODES`, and `VALID_GATE_STATES`.
+- `backend/app/mission/state.py`: Thread-safe `MissionStateManager` tracking lander mode, connectivity, and sensor health.
+- `backend/app/telemetry/processor.py`: JSON line parsing and validation of lander mode and BMP280/DHT11 readings.
 - `backend/app/telemetry/service.py`: `TelemetryService` linking telemetry ingestion to state updates.
 - `backend/tests/`: Pytest suite verifying telemetry parsing and state updates (original baseline: 9 passing tests).
 
@@ -85,11 +91,6 @@ The ESP32 pin assignments are established and coordinated across firmware (`land
 
 | Component / Function | ESP32 GPIO | Electrical / Hardware Notes |
 | :--- | :--- | :--- |
-| **Servo 1 Signal** | GPIO 18 | PWM signal only; requires external regulated power supply |
-| **Servo 2 Signal** | GPIO 19 | PWM signal only; requires external regulated power supply |
-| **Physical Gate Button** | GPIO 23 | Active LOW with internal pull-up (`INPUT_PULLUP`), debounced |
-| **Open Limit Switch** | GPIO 32 | Digital input, debounced |
-| **Closed Limit Switch** | GPIO 33 | Digital input, debounced |
 | **Green Status LED** | GPIO 25 | Active HIGH via series current-limiting resistor |
 | **Red Status LED** | GPIO 26 | Active HIGH via series current-limiting resistor |
 | **WS2812B Data** | GPIO 27 | 3.3V to 5V logic level compatibility must be verified |
@@ -104,38 +105,23 @@ The ESP32 pin assignments are established and coordinated across firmware (`land
 - **Flash Pins**: GPIO 6–11 are connected to internal SPI flash on classic ESP32 modules. **Never use GPIO 6–11.**
 - **Input-Only Pins**: GPIO 34–39 lack internal pull-up/pull-down resistors and cannot be configured as outputs.
 - **Voltage Limits**: ESP32 GPIO pins are **3.3V logic and NOT 5V tolerant**. Never connect 5V signals directly to GPIOs.
-- **Servo Power Isolation**: Never power MG996R servos from the ESP32 3.3V or 5V regulator rails. Servos must use a dedicated external regulated supply sharing a common ground reference.
 - **Hardware Modification Prohibition**: Do not alter this pinout without explicit approval and end-to-end documentation updates.
 
 ---
 
-## 5. Safety, State Machine, & Command Handling
+## 5. Safety, State Integrity, & Command Handling
 
-### Physical Gate States
-The gate state machine recognizes only the following valid states:
-`UNKNOWN`, `CLOSED`, `OPEN`, `OPENING`, `CLOSING`, `FAULT`.
+The lander supports status queries and ACTIVE/STANDBY mode selection only. It
+has no actuator, movement state machine, or limit-switch state.
 
-### Ground Truth Rules
-1. **Physical Hardware is the Sole Truth**: The backend must never assume the physical gate is `CLOSED` or `OPEN` purely because the backend service restarted or initialized.
-2. **Initial State is UNKNOWN**: After any backend restart, gateway disconnect, or telemetry timeout, the physical gate state must revert to `UNKNOWN` until verified by fresh telemetry or status query from the device.
-3. **No Automatic Movement**:
-   - **NEVER** issue movement commands (`OPEN_GATE`, `CLOSE_GATE`) automatically on backend startup.
-   - **NEVER** issue movement commands automatically upon gateway or serial reconnection.
-4. **No Blind Retries**:
-   - Do not retry `OPEN_GATE` or `CLOSE_GATE` automatically after a timeout.
-   - Movement command retries are strictly prohibited until end-to-end command IDs, idempotent duplicate suppression, and verification are fully implemented.
-5. **Acknowledgement ≠ Completion**:
-   - A `command_ack` with `accepted: true` confirms only that the lander validated and accepted the instruction.
-   - It **does not mean** the gate has finished moving or reached an endpoint.
-   - Completion is confirmed solely when physical limit switches signal `OPEN` or `CLOSED` via `gate_status` or `telemetry`.
-6. **No Fabricated Telemetry**:
-   - Never invent or fabricate sensor readings, and never substitute `0` or arbitrary values for disconnected sensors.
-   - Missing or failing sensor data must be explicitly represented as `null` (`None`) with error states logged.
-7. **Fault Latching**:
-   - Lander faults are latched in firmware. Software must not attempt to clear or suppress hardware faults without physical verification and proper procedures.
-   - Do not invent emergency-stop behaviors not supported by the hardware baseline.
-8. **Subsystem Isolation**:
-   - A failure or disconnect in one subsystem (e.g., DHT11 sensor failure or gateway disconnect) must never crash unrelated backend services or corrupt unaffected mission state.
+### State and Command Rules
+1. **Physical Hardware is the Sole Truth**: The backend must not claim device or sensor state that has not arrived in fresh telemetry/status.
+2. **Initial State is UNKNOWN**: After restart, gateway disconnect, or telemetry timeout, device connectivity and sensor state remain unavailable until fresh data arrives.
+3. **No Automatic Commands**: Never issue hardware commands automatically on backend startup or gateway/serial reconnection.
+4. **No Blind Retries**: Do not retry hardware commands automatically after timeout unless a separately reviewed idempotency design permits it.
+5. **Acknowledgement ≠ Completion**: An accepted command acknowledges status/mode handling; it is not proof of a physical state change. Use subsequent device-reported state.
+6. **No Fabricated Telemetry**: Never invent readings or substitute zero for disconnected sensors. Missing/failing readings are `null` (`None`) with the corresponding health state.
+7. **Subsystem Isolation**: Failure or disconnect in one subsystem (sensor, rover UDP, gateway) must not crash unrelated services or corrupt their state.
 
 ---
 
@@ -175,11 +161,10 @@ Gateway connectivity and device connectivity are independent:
 When communication with the gateway or device is restored:
 1. Re-establish network/serial session.
 2. Request fresh device status (`GET_STATUS`).
-3. Validate response schemas and confirm limit switch readings.
-4. Synchronize mission state cache with confirmed readings.
-5. Resume continuous telemetry streaming.
-6. **Never command physical movement during recovery.**
-7. Employ bounded exponential backoff to avoid hammering disconnected endpoints.
+3. Validate response schemas and synchronize state with device-reported mode and sensor health.
+4. Resume continuous telemetry streaming.
+5. **Never issue physical action during recovery.**
+6. Employ bounded exponential backoff to avoid hammering disconnected endpoints.
 
 ---
 
