@@ -12,6 +12,8 @@ from app.communication.network_runner import NetworkGatewayRunner
 from app.communication.simulator_runner import SimulatorRunner
 from app.communication.rover_model import RoverSource, RoverStatus, offline_status
 from app.communication.rover_runner import RoverRunner
+from app.communication.drone_model import DroneStatus, offline_drone_status
+from app.communication.drone_runner import DroneRunner
 from app.mission.command import (
     CommandSafetyViolation,
     CommandTracker,
@@ -118,6 +120,7 @@ if GATEWAY_MODE in ("network", "real"):
         ws_url=GATEWAY_WS_URL,
         http_url=GATEWAY_HTTP_URL,
         storage=storage,
+        broadcaster=dashboard_broadcaster,
     )
     simulator_runner = SimulatorRunner(
         gateway_client=GatewayClient(
@@ -151,6 +154,24 @@ rover_runner = RoverRunner(
     publish=_publish_rover_status,
 )
 
+DRONE_MODE = os.getenv("DRONE_MODE", "simulator").strip().lower()
+if DRONE_MODE not in ("simulator", "network"):
+    raise ValueError("DRONE_MODE must be 'simulator' or 'network'")
+
+
+def _publish_drone_status(status: DroneStatus) -> None:
+    dashboard_broadcaster.broadcast_sync({
+        "type": "drone_telemetry",
+        "drone": status.model_dump(mode="json"),
+    })
+
+
+drone_runner = DroneRunner(
+    mode=DRONE_MODE,
+    http_url=GATEWAY_HTTP_URL,
+    publish=_publish_drone_status,
+)
+
 
 class CommandSubmissionRequest(BaseModel):
     command: Optional[CommandName] = None
@@ -175,6 +196,12 @@ def get_mission_state():
 def get_rover_status():
     """Return independent rover state using the common simulator/network contract."""
     return rover_runner.snapshot().model_dump(mode="json")
+
+
+@router.get("/api/drone/status")
+def get_drone_status():
+    """Return independent drone state using the common simulator/network contract."""
+    return drone_runner.snapshot().model_dump(mode="json")
 
 
 @router.get("/api/mission/commands")

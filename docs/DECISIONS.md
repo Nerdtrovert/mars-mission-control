@@ -33,6 +33,7 @@
 | **ADR-021** | Exhibition Dashboard UI & Live WebSocket Broadcast | Vanilla HTML5/CSS3/ES6 in `frontend/` + `WS /ws/telemetry` | `superseded` | Actuator controls and gate presentation retired. Sensor, rover, reconnect, and polling behavior remain in current dashboard. |
 | **ADR-022** | Real Network Gateway Integration (HTTP REST & Persistent WebSocket) | `GatewayClient` with HTTP & `NetworkGatewayRunner` with WebSocket | `accepted` | Connects MacBook backend to standalone Raspberry Pi gateway daemon over local HTTP (`/health`, `/api/lander/status`, `/api/commands`) and persistent WebSocket (`/ws/telemetry`) with bounded exponential backoff. Preserves in-process simulator mode via `GATEWAY_MODE`. |
 | **ADR-023** | Retired Lander Ramp and Rover Telemetry Contract | Sensor-only lander; Pi UDP rover input on port 5005 | `accepted` | Supersedes actuator-specific decisions below. Keeps lander JSON framing and supported status/mode commands; rover packets are exactly `DIST,PITCH,ROLL,CMD,MODE`. Drone interface remains unspecified. |
+| **ADR-026** | Drone Telemetry Integration | Pi UDP 5007 ingestion, HTTP/WebSocket API, dashboard card | `accepted` | Drone telemetry flows: ESP32 drone → Pi UDP 5007 → gateway validation → HTTP `/api/drone/status` & WS `drone_telemetry` → frontend. Simulator in `drone_runner.py`. LCD forwarding via `mission_display`. No drone commands. |
 
 > **Current architecture amendment (ADR-023):** The ramp has been removed from
 > the physical design. Older gate, servo, limit-switch, and movement decisions
@@ -210,3 +211,32 @@
   - Rover UDP receiver on port 5005 is fully preserved in the gateway application lifecycle.
   - Power architecture: Low-current sensors (BMP280, DHT11) and display (20x4 LCD) are powered safely from ESP32 dev-board rails. WS2812B LED strip (30 LEDs) brightness is strictly capped at 60/255 (~150–300 mA peak) and powered from 5V/VIN (never GPIO). Wi-Fi eliminates the data cable to the Pi, but the ESP32 still requires a stable electrical power supply.
 - **Consequences**: Completely wireless operational link for the lander. Removed `pyserial` dependency from gateway. Preserved all REST, WebSocket, dashboard, and simulator contracts.
+
+### ADR-025: Live Rover and Drone Mission Display TCP Forwarding and LCD Rotation
+- **Status**: `accepted`
+- **Context**: The lander 20x4 LCD requires remote status pages displaying live rover and drone telemetry received by the Raspberry Pi gateway. The existing TCP connection (port 5006) between the ESP32 lander and the gateway must carry these updates without creating redundant network sockets, while honoring non-blocking LCD rendering, staleness timeouts, and rate limits.
+- **Decision**:
+  - Implemented `mission_display` JSON message forwarding across the existing lander TCP connection in `gateway/lander_manager.py`.
+  - Mapped rover datagram fields: `DIST` -> `distance`, `PITCH` -> `pitch`, `ROLL` -> `roll`, `CMD` -> `cmd`, `MODE` -> `mode`.
+  - Implemented rate-limiting (max 4 Hz during changes, 2.5s heartbeat when idle) and immediate offline notification (`connected: false`) upon rover packet silence (`ROVER_OFFLINE_TIMEOUT_S = 2.0s`).
+  - Added caching of the latest rover/drone display state in `LanderManager` to immediately synchronize freshly connected or reconnecting lander clients.
+  - Implemented `DroneUDPReceiver` in `gateway/drone_udp.py` listening on UDP port 5007 with field mapping (`flight_status`, `latitude`, `longitude`) and offline monitoring. No fake telemetry is fabricated.
+  - Firmware (`lander.ino` v1.5.0) rotates through 5 non-blocking LCD pages: Lander status (2.5s), Lander sensors (2.5s), Rover (5s), Drone (5s), and Mars fun fact (5s).
+- **Consequences**: Single persistent TCP channel handles lander telemetry, commands, and remote mission display updates. Physical hardware testability is preserved and verified by automated unit and integration tests.
+
+### ADR-026: Drone Telemetry Integration
+- **Status**: `accepted`
+- **Context**: The drone telemetry capability was previously unspecified in ADR-023. The drone team defined a transport (UDP port 5007), payload schema (JSON with device_id, sequence, timestamp_ms, flight_status, orientation, environment, gps, battery), and integration requirements (gateway ingestion, HTTP/WebSocket API, dashboard display, LCD forwarding).
+- **Decision**:
+  - Implemented `DroneUDPReceiver` in `gateway/drone_udp.py` listening on UDP port 5007 with full schema validation (`parse_drone_datagram`).
+  - Added sequence number validation with RFC 1982 rollover support.
+  - Implemented staleness monitoring with `DRONE_OFFLINE_TIMEOUT_S` (default 10s); transitions to OFFLINE when no valid packet received within timeout.
+  - Gateway exposes `GET /api/drone/status` returning drone status with connection state, flight status, GPS, battery, and full telemetry object.
+  - WebSocket broadcasts `drone_telemetry` messages with drone status on each valid packet and on connection state transitions.
+  - Implemented `DroneRunner` in `backend/app/communication/drone_runner.py` with simulator and network modes (`DRONE_MODE` env var).
+  - Simulator cycles through flight phases: STANDBY, TAKEOFF, CRUISING, HOVERING, LANDING with deterministic telemetry.
+  - Drone display state (flight_status, latitude, longitude, altitude_m) forwarded to lander LCD via `mission_display` TCP message with `device: "drone"`.
+  - Frontend dashboard adds dedicated drone telemetry card with connection badge, flight status, altitude, GPS, battery, orientation, and environment readings.
+  - Added drone status badge to dashboard header.
+  - No drone commands are implemented; drone is telemetry-only.
+- **Consequences**: Complete drone telemetry pipeline from ESP32 drone through Pi gateway to Mac backend and dashboard. Simulator mode enables hardware-free development. All existing tests pass.

@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import FastAPI
 
 from gateway.config import GatewayConfig
+from gateway.drone_udp import DroneUDPReceiver
 from gateway.routes import create_gateway_router
 from gateway.lander_manager import LanderManager
 from gateway.tcp_transport import LanderTCPTransport
@@ -23,21 +24,24 @@ def create_gateway_app(
     ws_broadcaster = WebSocketBroadcaster()
     trans = transport or LanderTCPTransport(host=cfg.lander_tcp_host, port=cfg.lander_tcp_port)
     lander_mgr = LanderManager(config=cfg, transport=trans, ws_broadcaster=ws_broadcaster)
-    rover_receiver = RoverUDPReceiver(config=cfg, broadcaster=ws_broadcaster)
+    rover_receiver = RoverUDPReceiver(config=cfg, broadcaster=ws_broadcaster, lander_manager=lander_mgr)
+    drone_receiver = DroneUDPReceiver(config=cfg, broadcaster=ws_broadcaster, lander_manager=lander_mgr)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await lander_mgr.start()
         try:
             await rover_receiver.start()
+            await drone_receiver.start()
             yield
         finally:
+            await drone_receiver.stop()
             await rover_receiver.stop()
             await lander_mgr.stop()
 
     app = FastAPI(
         title="Mars Mission Control — Hardware Edge Gateway",
-        description="Raspberry Pi edge gateway receiving lander telemetry over Wi-Fi TCP and rover telemetry over UDP.",
+        description="Raspberry Pi edge gateway receiving lander telemetry over Wi-Fi TCP, rover telemetry over UDP 5005, and drone telemetry over UDP 5007.",
         version=cfg.version,
         lifespan=lifespan,
     )
@@ -48,9 +52,10 @@ def create_gateway_app(
     app.state.lander_manager = lander_mgr
     app.state.ws_broadcaster = ws_broadcaster
     app.state.rover_receiver = rover_receiver
+    app.state.drone_receiver = drone_receiver
 
     # Include routes
-    router = create_gateway_router(lander_mgr, ws_broadcaster, rover_receiver)
+    router = create_gateway_router(lander_mgr, ws_broadcaster, rover_receiver, drone_receiver)
     app.include_router(router)
 
     return app

@@ -8,8 +8,10 @@
 | GET | `/api/devices` | Lander identity and connection state |
 | GET | `/api/lander/status` | Lander mode, timestamp, and sensor health |
 | GET | `/api/rover/status` | Latest valid rover datagram plus online/stale state |
+| GET | `/api/drone/status` | Latest drone telemetry plus online/offline state |
+| POST | `/api/drone/display` | Forward drone display state to lander LCD |
 | POST | `/api/commands` | Send a supported lander status/mode command |
-| WebSocket | `/ws/telemetry` | Lander telemetry and rover updates |
+| WebSocket | `/ws/telemetry` | Lander telemetry, rover, and drone updates |
 
 The lander status contract contains `gateway_state`, `device_state`,
 `timestamp_ms`, `mode` (`ACTIVE`/`STANDBY`), `sensors_polling`, `bmp280_ok`,
@@ -66,6 +68,43 @@ Both Pi and Mac expose the same public rover fields: `rover_id`, `distance_cm`,
 uses `source: "simulator"`; network mode uses `source: "network"`. Mac
 WebSocket updates use `{ "type": "rover_telemetry", "rover": <status> }`.
 
+## Drone UDP and status contract
+
+The Pi listens on `DRONE_UDP_HOST` / `DRONE_UDP_PORT` (default `0.0.0.0:5007`).
+The drone ESP32 sends JSON datagrams with the following authoritative schema:
+
+```json
+{
+  "device_id": "esp32-drone",
+  "sequence": 1,
+  "timestamp_ms": 123456,
+  "flight_status": "STANDBY",
+  "orientation": {"roll": 0.5, "pitch": -1.2, "yaw": 45.0},
+  "environment": {"temperature_c": 22.5, "pressure_hpa": 1013.2, "humidity_pct": 48.0},
+  "gps": {"latitude": 12.9716, "longitude": 77.5946, "altitude_m": 50.0},
+  "battery": {"voltage_v": 11.8, "percentage": 85.0}
+}
+```
+
+All fields are nullable except `device_id`, `sequence`, `timestamp_ms`, and `flight_status`.
+Numeric fields have strict ranges (e.g., latitude -90 to 90, longitude -180 to 180,
+altitude -1000 to 50000, battery percentage 0-100, voltage 0-100V,
+temperature -100 to 100°C, pressure 0-2000 hPa, humidity 0-100%).
+Invalid, out-of-range, or missing required fields cause the entire datagram
+to be rejected without updating the last valid state.
+
+The Pi status adds `drone_id: "esp32-drone"`, `connection_state` (`ONLINE`/`OFFLINE`),
+`last_seen` (ISO 8601 receipt timestamp), `source: "network"`, and the full
+`telemetry` object when online. It retains last-known readings when offline
+while marking them explicitly offline. The Pi marks the drone offline after
+`DRONE_OFFLINE_TIMEOUT_S` (default 10 seconds) without a valid packet.
+
+Both Pi and Mac expose the same public drone fields: `drone_id`, `flight_status`,
+`latitude`, `longitude`, `altitude_m`, `battery_percentage`, `connection_state`,
+`last_seen`, `source`, and `telemetry` (the full parsed datagram when online).
+Simulator mode uses `source: "simulator"`; network mode uses `source: "network"`.
+Mac WebSocket updates use `{ "type": "drone_telemetry", "drone": <status> }`.
+
 ## MacBook Mission Control API and live updates
 
 The existing `/api/mission/state`, `/api/mission/telemetry/history`,
@@ -75,5 +114,7 @@ and `/ws/telemetry` endpoints remain. Lander live frames use `telemetry` and
 dashboard also polls `/api/rover/status` as a fallback. `GATEWAY_MODE` and
 `ROVER_MODE` independently select simulator or network adapters.
 
-There is no drone endpoint or message schema because the drone interface has
-not yet been defined.
+The Raspberry Pi gateway supports drone UDP ingestion on port 5007 and exposes
+`/api/drone/status` and `/api/drone/display`. When no physical drone is transmitting,
+it reports OFFLINE without fabricating telemetry. Drone display messages are
+forwarded to the lander LCD when telemetry arrives.

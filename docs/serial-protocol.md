@@ -46,6 +46,57 @@ newline-delimited JSON framing. The ESP32 returns command_ack; GET_STATUS also
 returns status, and mode changes return mode_status. These are status and
 sensor-mode operations only; no physical movement commands exist.
 
+## Remote mission display forwarding
+
+The Raspberry Pi forwards live rover and drone status to the lander ESP32 across
+the same TCP stream to populate dedicated remote display pages on the 20x4 LCD:
+
+### Rover display message
+
+```json
+{
+  "type": "mission_display",
+  "device": "rover",
+  "connected": true,
+  "data": {
+    "distance": 145.0,
+    "pitch": 12.4,
+    "roll": -3.2,
+    "cmd": "F",
+    "mode": "M"
+  }
+}
+```
+
+Field mapping from rover UDP:
+- `DIST` -> `data.distance` (cm, float)
+- `PITCH` -> `data.pitch` (deg, float)
+- `ROLL` -> `data.roll` (deg, float)
+- `CMD` -> `data.cmd` (command code, string)
+- `MODE` -> `data.mode` (operating mode, string)
+
+### Drone display message
+
+```json
+{
+  "type": "mission_display",
+  "device": "drone",
+  "connected": true,
+  "data": {
+    "flight_status": "STANDBY",
+    "latitude": 12.9716,
+    "longitude": 77.5946,
+    "altitude_m": 50.0
+  }
+}
+```
+
+### Staleness and connection rules
+- The gateway rate-limits rover forwarding to at most 4 Hz during high-frequency changes, with a 2.5s heartbeat refresh when idle.
+- When rover datagrams stop for `ROVER_OFFLINE_TIMEOUT_S` (2.0s), the gateway immediately sends a `mission_display` packet with `connected: false`.
+- The lander firmware independently marks remote data `OFFLINE` if no packet arrives within 10 seconds (`REMOTE_TIMEOUT_MS`).
+- When a lander connects or reconnects, the gateway immediately transmits the latest cached rover and drone display state.
+
 ## Serial and USB interfaces
 
 1. **Lander ESP32 USB Serial**:

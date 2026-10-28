@@ -1,50 +1,157 @@
-MARS LANDER — ESP32 SENSOR AND STATUS WIRING
-Board: ESP32 DevKit V1, ESP32-WROOM-32
-This pin map records the retained sensors, display, and indicators only.
-Verify board/module electrical requirements and physical wiring before power.
+MARS LANDER — ESP32 SENSOR AND STATUS WIRING STRUCTURE
+Document Version: 1.4.0 (Coordinated with lander.ino v1.4.0)
+Board: ESP32 DevKit V1 (ESP32-WROOM-32, 38-pin / 30-pin)
+Operational Interface: Private Local Wi-Fi TCP (Port 5006) to Raspberry Pi 4 Gateway
+Diagnostic Interface: USB Serial (115200 8N1, programming and debug text only)
 
-GPIO ASSIGNMENTS
+This document establishes the authoritative hardware pin assignments, electrical
+rules, bus configurations, and timing specifications for the Mars Lander controller.
+The physical ramp, servo motors, limit switches, and push button were retired per
+ADR-023 and are not connected.
 
-Component                 ESP32 GPIO     Connection / Notes
------------------------------------------------------------------------
-Green status LED          GPIO 25        Output with series resistor
-Red status LED            GPIO 26        Output with series resistor
-WS2812B data              GPIO 27        Verify logic-level requirements
-BMP280 SDA                GPIO 21        I2C SDA
-BMP280 SCL                GPIO 22        I2C SCL
-20x4 LCD SDA              GPIO 21        Shares bus with BMP280
-20x4 LCD SCL              GPIO 22        Shares bus with BMP280
-DHT11 data                GPIO 17        Digital data input
+================================================================================
+1. GPIO PIN ASSIGNMENTS & OWNERSHIP
+================================================================================
 
-SHARED I2C BUS
-- SDA: GPIO 21; SCL: GPIO 22.
-- Connect the LCD backpack and BMP280 to this bus; verify addresses differ.
-- Check module logic voltage; do not assume every backpack is safe at 3.3V.
+Component / Function       ESP32 GPIO   Direction   Electrical & Wiring Notes
+--------------------------------------------------------------------------------
+Green Status LED           GPIO 25      OUTPUT      Active HIGH via series resistor (220-330 ohm).
+                                                    Indicates ACTIVE operating mode.
+Red Status LED             GPIO 26      OUTPUT      Active HIGH via series resistor (220-330 ohm).
+                                                    Indicates sensor fault in ACTIVE mode.
+BMP280 I2C (SDA)           GPIO 21      BIDIR       Shared I2C bus (3.3V logic).
+BMP280 I2C (SCL)           GPIO 22      OUTPUT      Shared I2C bus (3.3V clock).
+20x4 LCD I2C (SDA)         GPIO 21      BIDIR       Shared I2C bus with BMP280.
+20x4 LCD I2C (SCL)         GPIO 22      OUTPUT      Shared I2C bus with BMP280.
+DHT11 Environmental Data   GPIO 17      BIDIR       1-wire digital data pin (pull-up required).
 
-POWER AND ELECTRICAL RULES
-- ESP32 GPIOs use 3.3V logic and are not 5V tolerant.
-- Use suitable series resistors for the green and red indicator LEDs.
-- GPIO pins are control signals and must not be used as peripheral power rails.
-- Avoid separate power supplies unless electrical requirements strictly require one.
-- Power low-current sensors (BMP280 < 1mA at 3.3V; DHT11 1-2.5mA at 3.3V/5V) directly from ESP32 dev-board power pins.
-- 20x4 LCD backpack typically requires 5V VIN for backlight/contrast (~20-50mA); I2C SDA/SCL must remain 3.3V logic compatible.
-- WS2812B (30 LEDs on GPIO 27): Full white draws up to 1.8A, but firmware clamps brightness to 60/255 (~150-300mA peak). Connect strip power to 5V/VIN (sharing common ground), never an ESP32 GPIO. Sizing of host USB supply should provide at least 1A-1.5A to handle ESP32 Wi-Fi bursts plus LEDs.
-- Status LEDs (GPIO 25 green, GPIO 26 red) draw ~5-10mA through series current-limiting resistors.
-- Share ground references across all peripherals and power supplies.
-- The ESP32 needs a stable power source (USB or VIN) even though Wi-Fi removes its operational data cable to the Pi.
-- GPIOs 6–11 are connected to flash on classic ESP32-WROOM-32 boards.
-- GPIOs 34–39 are input-only; check boot-strapping behavior before use.
+RETIRED / UNUSED GPIOs:
+- GPIO 18, 19, 23, 27, 32, 33: Former servo PWM, limit switches, gate button, and
+  WS2812B data pins. Retired; must remain completely disconnected.
 
-FIRMWARE BEHAVIOR
-- Lander telemetry and status/mode commands use newline-delimited JSON over a
-  Wi-Fi TCP connection initiated by the ESP32 to the Pi (default port 5006).
-- USB serial remains available at 115200 8N1 for programming/debug only; the
-  Pi does not open it.
-- ACTIVE mode polls BMP280 and DHT11; failed readings are sent as null.
-- STANDBY pauses sensor polling; GET_STATUS and mode commands remain available.
-- LCD rotates lander status, BMP280 readings, DHT11 readings, and Wi-Fi link status.
-- Green indicates ACTIVE; WS2812B retains the space-themed animation.
-- The retired ramp, servos, physical button, and limit switches are not part of
-  the lander wiring or firmware.
+PROHIBITED PINS (DO NOT USE):
+- GPIO 6–11: Hardwired internally to SPI flash memory on ESP32-WROOM-32.
+  Connecting peripherals to GPIO 6–11 will cause boot crashes or module damage.
 
+INPUT-ONLY PINS:
+- GPIO 34, 35, 36, 39: Input-only (no internal pull-up / pull-down resistors).
+  Cannot be configured as outputs.
+
+================================================================================
+2. SHARED I2C BUS SPECIFICATIONS
+================================================================================
+
+- Bus Pins: SDA = GPIO 21, SCL = GPIO 22.
+- Bus Frequency: 100 kHz standard mode (I2C_CLOCK_HZ = 100000).
+- Bus Timeout: 30 ms (I2C_TIMEOUT_MS = 30) via Wire.setTimeOut.
+- Device Addresses:
+  * 20x4 LCD Backpack (PCF8574): Address 0x27 (LCD_I2C_ADDR).
+    Note: Many third-party backpacks default to 0x3F. Verify with an I2C scan.
+  * BMP280 Barometric Pressure / Temperature:
+    Firmware auto-detects either address 0x76 (BMP280_ADDR_A) or 0x77 (BMP280_ADDR_B).
+- Electrical Compatibility:
+  * BMP280 operates strictly at 3.3V.
+  * 20x4 LCD PCF8574 backpack typically requires 5V VIN for contrast and backlight.
+    Ensure backpack I2C pull-ups do not pull SDA/SCL lines above 3.3V, or use a
+    bi-directional logic-level shifter between the ESP32 and the 5V LCD backpack.
+
+================================================================================
+3. POWER DISTRIBUTION & ELECTRICAL SAFETY RULES
+================================================================================
+
+- Logic Voltage: ESP32 GPIOs operate strictly at 3.3V logic and are NOT 5V tolerant.
+  Never feed 5V signals into any ESP32 GPIO.
+- Common Ground: A shared, low-impedance ground reference (GND) must connect all
+  peripherals, sensor modules, and the ESP32 dev board.
+- Peripheral Power Rails:
+  * BMP280 (< 1 mA @ 3.3V): Power directly from the ESP32 dev board 3V3 pin.
+  * DHT11 (1–2.5 mA @ 3.3V–5V): Power from ESP32 3V3 rail (or 5V with level shifting).
+  * 20x4 LCD Backpack (20–50 mA @ 5V): Power from the 5V/VIN rail.
+  * Status LEDs (GPIO 25 Green, GPIO 26 Red): Draw 5–10 mA each through series
+    current-limiting resistors (220–330 ohm).
+- Host Power Supply: The USB or external 5V supply powering the ESP32 should provide
+  at least 500 mA to 1.0 A continuous capacity to prevent brownout resets during
+  Wi-Fi transmission bursts.
+- Autonomous Stability: The ESP32 requires a dedicated, stable power supply at the
+  lander exhibition rig even though Wi-Fi eliminates the physical data cable to the Pi.
+
+================================================================================
+4. FIRMWARE TIMING & THRESHOLD CONSTANTS
+================================================================================
+
+All configuration constants are declared in Section 1 of Lander/lander/lander.ino:
+
+Parameter                 Value         Firmware Identifier / Notes
+--------------------------------------------------------------------------------
+Firmware Version          1.4.0         FIRMWARE_VERSION
+USB Debug Baud Rate       115200 8N1    DEBUG_BAUD (Programming & debug text only)
+Sensor Polling Interval   2000 ms       SENSOR_POLL_MS (in ACTIVE mode)
+First Sensor Poll Delay   1000 ms       SENSOR_FIRST_POLL_MS (after boot)
+Telemetry Streaming Rate  1000 ms       TELEMETRY_MS (~1 Hz in ACTIVE mode)
+BMP280 Retry Backoff      10000 ms      BMP_RETRY_MS (after failed poll/read)
+LCD Page Rotation         6000 ms       LCD_ROTATE_MS (cycles 4 pages in ACTIVE mode)
+Wi-Fi Connect Retry       5000 ms       WIFI_RETRY_MS (station reconnect backoff)
+TCP Connect Retry         1000 ms       TCP_RETRY_MS (gateway connection backoff)
+TCP Connect Timeout       50 ms         TCP_CONNECT_TIMEOUT_MS
+
+================================================================================
+5. SENSOR OPERATING VALIDITY RANGES
+================================================================================
+
+Readings outside these physical limits are rejected by firmware as invalid and
+cause the sensor state to latch SENSOR_FAILED with null (NaN) values:
+
+Sensor Metric              Minimum       Maximum       Identifier
+--------------------------------------------------------------------------------
+BMP280 Temperature         -40.0 °C      +85.0 °C      BMP_TEMP_MIN_C / BMP_TEMP_MAX_C
+BMP280 Barometric Pressure 300.0 hPa     1100.0 hPa    BMP_PRESS_MIN_HPA / BMP_PRESS_MAX_HPA
+DHT11 Temperature          0.0 °C        +50.0 °C      DHT_TEMP_MIN_C / DHT_TEMP_MAX_C
+DHT11 Relative Humidity    0.0 %         100.0 %       DHT_HUM_MIN_PCT / DHT_HUM_MAX_PCT
+
+================================================================================
+6. OPERATING MODES & SYSTEM BEHAVIOR
+================================================================================
+
+ACTIVE MODE (Default at boot):
+- Green Status LED: ON (HIGH).
+- Red Status LED: ON (HIGH) if BMP280 or DHT11 reports SENSOR_FAILED; OFF if all OK.
+- Sensors: Polled every 2000 ms; valid readings rounded to 1 decimal place.
+- Telemetry: Streams JSON telemetry packets every 1000 ms to the Raspberry Pi over TCP.
+- LCD: Rotates through 4 display pages every 6000 ms:
+    Page 0: "MARS LANDER ACTIVE" / Sensor health (OK/FAILED) / Wi-Fi link status
+    Page 1: BMP280 Temperature (°C) and Pressure (hPa)
+    Page 2: DHT11 Temperature (°C) and Humidity (%)
+    Page 3: Mission Link Status (Lander ACTIVE / Rover status note / Drone note)
+
+STANDBY MODE (Commanded via SET_STANDBY):
+- Green Status LED: OFF (LOW).
+- Red Status LED: OFF (LOW) (fault indicator suppressed in standby).
+- Sensors: Polling paused; readings cleared to null (NaN); state set to SENSOR_NO_DATA.
+- Telemetry: Periodic sensor telemetry streaming paused.
+- LCD: Static display:
+    Line 0: "LANDER STANDBY"
+    Line 1: "Sensors paused"
+    Line 2: "Wi-Fi link available"
+    Line 3: "Mission Control"
+- TCP Link: Wi-Fi connection and command channel remain fully active; responds to
+  GET_STATUS, SET_ACTIVE, and SET_STANDBY commands with correlated acknowledgements.
+
+================================================================================
+7. COMMUNICATIONS & FRAMING PROTOCOL
+================================================================================
+
+- Transport: ESP32 acts as a TCP client connecting to the Raspberry Pi hardware
+  gateway listening on TCP port 5006 (configurable via GATEWAY_HOST and GATEWAY_PORT).
+- Framing: Newline-delimited JSON (UTF-8, '\n' terminator).
+- Command Buffer: 256 bytes with LINE_OVERFLOW protection discarding excess bytes.
+- Outbound Message Types:
+  * "telemetry": Periodic 1 Hz telemetry tick in ACTIVE mode.
+  * "status": Complete device state snapshot sent on connection and upon GET_STATUS.
+  * "mode_status": Operating mode transition confirmation (ACTIVE / STANDBY).
+  * "command_ack": Integer request_id correlated command acceptance or rejection.
+- USB Serial: 115200 8N1 used exclusively for programming, monitoring, and debug text
+  prefixed with "[lander]". Operational JSON is never written to USB serial.
+
+================================================================================
 END OF FILE
+================================================================================

@@ -38,6 +38,11 @@
         <span class="badge-text">LANDER: UNKNOWN</span>
       </div>
 
+      <div id="drone-status-badge" class="badge state-not-connected">
+        <span class="badge-dot"></span>
+        <span class="badge-text">DRONE: UNKNOWN</span>
+      </div>
+
       <div id="mode-badge" class="badge state-not-connected">
         <span class="badge-dot"></span>
         <span class="badge-text">MODE: --</span>
@@ -174,6 +179,28 @@
         <div class="metric-box"><span class="metric-name">DRIVE MODE</span><div class="metric-value"><span id="rover-mode">--</span></div></div>
       </div>
       <div id="rover-event" class="rover-event">Waiting for rover telemetry.</div>
+    </section>
+
+    <!-- Independent drone telemetry panel; this device communicates via UDP 5007 to the Pi gateway. -->
+    <section class="card drone-card" aria-labelledby="drone-panel-title">
+      <div class="card-header">
+        <h2 id="drone-panel-title" class="card-title">MARS DRONE TELEMETRY</h2>
+        <span id="drone-source" class="drone-source">SIMULATED</span>
+      </div>
+      <div class="drone-status-row">
+        <span id="drone-connection" class="drone-connection offline">OFFLINE</span>
+        <span id="drone-last-seen" class="drone-last-seen">NO VALID PACKETS</span>
+      </div>
+      <p class="drone-note">Flight telemetry only; drone commands are not dispatched from Mission Control.</p>
+      <div class="drone-metrics">
+        <div class="metric-box"><span class="metric-name">FLIGHT STATUS</span><div class="metric-value"><span id="drone-flight-status">--</span></div></div>
+        <div class="metric-box"><span class="metric-name">ALTITUDE</span><div class="metric-value"><span id="drone-altitude">--</span><span class="metric-unit">m</span></div></div>
+        <div class="metric-box"><span class="metric-name">GPS LAT / LON</span><div class="metric-value"><span id="drone-gps">-- / --</span><span class="metric-unit">°</span></div></div>
+        <div class="metric-box"><span class="metric-name">BATTERY</span><div class="metric-value"><span id="drone-battery">--</span><span class="metric-unit">%</span></div></div>
+        <div class="metric-box"><span class="metric-name">ORIENTATION</span><div class="metric-value"><span id="drone-orientation">-- / -- / --</span><span class="metric-unit">°</span></div></div>
+        <div class="metric-box"><span class="metric-name">ENVIRONMENT</span><div class="metric-value"><span id="drone-environment">--°C / --hPa / --%</span></div></div>
+      </div>
+      <div id="drone-event" class="drone-event">Waiting for drone telemetry.</div>
     </section>
 
     <!-- Card 3: Command Lifecycle Audit Log -->

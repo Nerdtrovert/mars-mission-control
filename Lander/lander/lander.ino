@@ -1,450 +1,1432 @@
 /*
- * Mars lander ESP32 firmware, sensor and status baseline.   v1.4.0
- * ESP32 DevKit V1; lander telemetry and status commands use a local Wi-Fi TCP
- * connection to the Raspberry Pi. USB serial is for programming/debug text
- * ONLY; no operational JSON is written to it.
- * Hardware has not been physically tested. This source has NOT been compiled
- * by the author of this change (no ESP32 toolchain was available).
+ * Mars Lander Firmware v1.5.0
+ * ESP32-WROOM-32 / DevKit V1
  *
- * Arduino libraries: ArduinoJson 7, Adafruit BMP280, Adafruit Unified Sensor,
- * Adafruit BusIO, Adafruit DHT sensor, Adafruit NeoPixel, LiquidCrystal_I2C.
- * (WiFi and Wire come with the ESP32 Arduino core.)
+ * Features:
+ * - Wi-Fi station connection to Mission Control
+ * - TCP connection to Raspberry Pi, port 5006
+ * - Newline-delimited JSON telemetry and commands
+ * - Rover and drone display-message handlers
+ * - BMP280 and DHT11 sensor polling
+ * - 20x4 I2C LCD with rotating pages
+ * - Green/red status LEDs
  *
- * ALL configuration lives in this file (SECTION 1). There is no external
- * config header. Do not commit real Wi-Fi credentials to version control.
- *
- * PIN OWNERSHIP (each GPIO is used by exactly one peripheral signal):
- *   GPIO17 DHT11 data        GPIO25 green LED     GPIO26 red LED
- *   GPIO27 WS2812B data      GPIO21 I2C SDA       GPIO22 I2C SCL
- * The I2C bus (21/22) is shared BY DESIGN between the LCD and the BMP280:
- * that is what I2C is for. They are compatible only if their addresses differ
- * (LCD 0x27 or 0x3F; BMP280 0x76 or 0x77). Verify with an I2C scan.
- * Ramp/motor/limit-switch/button functionality is removed; GPIO 18, 19, 23,
- * 32, 33 are therefore unused by this firmware.
+ * Libraries:
+ * - ArduinoJson
+ * - LiquidCrystal_I2C
+ * - Adafruit BMP280 Library
+ * - Adafruit Unified Sensor
+ * - DHT sensor library
  */
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <math.h>
 #include <Wire.h>
 #include <ArduinoJson.h>
-#include <Adafruit_Sensor.h>
+#include <LiquidCrystal_I2C.h>
 #include <Adafruit_BMP280.h>
 #include <DHT.h>
-#include <Adafruit_NeoPixel.h>
-#include <LiquidCrystal_I2C.h>
+#include <math.h>
 
-// ============================================================================
-//  SECTION 1: CONFIGURATION (everything lives here)
-// ============================================================================
+// ============================================================
+// CONFIGURATION
+// ============================================================
 
-#define FIRMWARE_VERSION "1.4.0"
-#define DHT_TYPE DHT11
+static const char *FIRMWARE_VERSION = "1.5.0";
 
-// ---- Wi-Fi / gateway (FILL IN BEFORE USE) ----------------------------------
-// While SSID or host is empty, Wi-Fi/TCP is skipped and the lander still runs
-// its sensors, LCD, LEDs and animation locally.
-static const char*    WIFI_SSID     = "Mission Control";       // <-- your 2.4 GHz network name
-static const char*    WIFI_PASSWORD = "mission@mars";       // <-- your Wi-Fi password
-static const char*    GATEWAY_HOST  = "192.168.50.1";       // <-- Raspberry Pi IP or hostname
-static const uint16_t GATEWAY_PORT  = 5006;     // Pi TCP listener port
+static const char *WIFI_SSID = "Mission-Control";
+static const char *WIFI_PASSWORD =
+    "mission@mars";
 
-// ---- GPIO assignments (distinct pins, one peripheral per pin) --------------
-static const uint8_t PIN_LED_GREEN = 25;
-static const uint8_t PIN_LED_RED   = 26;
-static const uint8_t PIN_WS2812    = 27;
-static const uint8_t PIN_I2C_SDA   = 21;   // shared bus: LCD + BMP280
-static const uint8_t PIN_I2C_SCL   = 22;   // shared bus: LCD + BMP280
-static const uint8_t PIN_DHT       = 17;
+static const char *GATEWAY_HOST = "192.168.50.1";
+static constexpr uint16_t GATEWAY_TCP_PORT = 5006;
 
-// ---- I2C / LCD -------------------------------------------------------------
-static const uint8_t  LCD_I2C_ADDR   = 0x27;   // PROVISIONAL: many backpacks use 0x3F
-static const uint8_t  LCD_COLS       = 20;
-static const uint8_t  LCD_ROWS       = 4;
-static const uint8_t  BMP280_ADDR_A  = 0x76;
-static const uint8_t  BMP280_ADDR_B  = 0x77;
-static const uint32_t I2C_CLOCK_HZ   = 100000;
-static const uint16_t I2C_TIMEOUT_MS = 30;
+static constexpr uint8_t PIN_GREEN_LED = 25;
+static constexpr uint8_t PIN_RED_LED = 26;
+static constexpr uint8_t PIN_LED_GREEN = PIN_GREEN_LED;
+static constexpr uint8_t PIN_LED_RED = PIN_RED_LED;
+static const uint32_t DEBUG_BAUD = 115200;
 
-// ---- Timing ----------------------------------------------------------------
-static const uint32_t DEBUG_BAUD           = 115200;  // USB serial: debug only
-static const uint32_t SENSOR_POLL_MS       = 2000;
-static const uint32_t SENSOR_FIRST_POLL_MS = 1000;
-static const uint32_t BMP_RETRY_MS         = 10000;
-static const uint32_t TELEMETRY_MS         = 1000;
-static const uint32_t LCD_ROTATE_MS        = 6000;
-static const uint32_t WIFI_RETRY_MS        = 5000;
-static const uint32_t TCP_RETRY_MS         = 1000;
-static const uint16_t TCP_CONNECT_TIMEOUT_MS = 50;   // blocks up to this long per attempt
-static const uint32_t ANIM_INTERVAL_MS     = 40;
+static constexpr uint8_t PIN_DHT = 17;
+static constexpr uint8_t DHT_TYPE = DHT11;
 
-// ---- WS2812B ---------------------------------------------------------------
-static const uint8_t NUM_LEDS         = 30;   // PROVISIONAL (approx. 1 m strip)
-static const uint8_t STRIP_BRIGHTNESS = 60;   // PROVISIONAL
+static constexpr uint8_t PIN_I2C_SDA = 21;
+static constexpr uint8_t PIN_I2C_SCL = 22;
 
-// ---- Sensor validity ranges ------------------------------------------------
-static const float BMP_TEMP_MIN_C = -40.0f, BMP_TEMP_MAX_C = 85.0f;
-static const float BMP_PRESS_MIN_HPA = 300.0f, BMP_PRESS_MAX_HPA = 1100.0f;
-static const float DHT_TEMP_MIN_C = 0.0f, DHT_TEMP_MAX_C = 50.0f;
-static const float DHT_HUM_MIN_PCT = 0.0f, DHT_HUM_MAX_PCT = 100.0f;
+static constexpr uint8_t LCD_ADDRESS = 0x27;
+static constexpr uint8_t LCD_COLUMNS = 20;
+static constexpr uint8_t LCD_ROWS = 4;
 
-// ============================================================================
-//  SECTION 2: STATE
-// ============================================================================
+static constexpr uint32_t SENSOR_POLL_MS = 2000;
+static constexpr uint32_t BMP_RETRY_MS = 10000;
+static constexpr uint32_t TELEMETRY_MS = 1000;
 
-enum OperatingMode : uint8_t { OPMODE_ACTIVE, OPMODE_STANDBY };
-enum SensorState : uint8_t { SENSOR_NO_DATA, SENSOR_OK, SENSOR_FAILED };
+static constexpr uint32_t WIFI_RETRY_MS = 10000;
+static constexpr uint32_t TCP_RETRY_MS = 1000;
 
-static OperatingMode gMode = OPMODE_ACTIVE;
-static SensorState gBmpState = SENSOR_NO_DATA;
-static SensorState gDhtState = SENSOR_NO_DATA;
-static bool gBmpReady = false;
-static bool gLcdOk = false;
-static uint32_t gLastBmpAttempt = 0;
-static uint32_t gLastSensorPoll = 0;
-static uint32_t gLastTelemetry = 0;
-static uint32_t gLastLcdRotate = 0;
-static uint32_t gLastAnimation = 0;
-static uint32_t gLastWiFiRetry = 0;
-static uint32_t gLastTcpRetry = 0;
-static bool gWiFiStarted = false;
-static bool gWiFiConfigNoted = false;
-static char gCommandBuffer[256];
-static size_t gCommandLength = 0;
-static uint8_t gLcdPage = 0;
-static bool gLcdNeedsRefresh = true;
-static uint32_t gClockStart = 0;
-static float gBmpTemp = NAN, gPressure = NAN, gDhtTemp = NAN, gHumidity = NAN;
+static constexpr uint32_t REMOTE_TIMEOUT_MS = 10000;
 
-static Adafruit_BMP280 gBmp;
-static DHT gDht(PIN_DHT, DHT_TYPE);
-static LiquidCrystal_I2C gLcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS);
-static Adafruit_NeoPixel gStrip(NUM_LEDS, PIN_WS2812, NEO_GRB + NEO_KHZ800);
-static WiFiClient gGatewayClient;
+static constexpr uint32_t LCD_LANDER_MS = 2500;
+static constexpr uint32_t LCD_REMOTE_MS = 5000;
+static constexpr uint32_t LCD_FACT_MS = 5000;
 
-// ============================================================================
-//  SECTION 3: HELPERS AND OUTPUT
-// ============================================================================
+static constexpr size_t TCP_BUFFER_SIZE = 768;
 
-static const char* modeName(OperatingMode mode) {
-  return mode == OPMODE_ACTIVE ? "ACTIVE" : "STANDBY";
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum OperatingMode : uint8_t {
+  OPMODE_ACTIVE,
+  OPMODE_STANDBY
+};
+
+enum SensorState : uint8_t {
+  SENSOR_NO_DATA,
+  SENSOR_OK,
+  SENSOR_FAILED
+};
+
+enum LcdPage : uint8_t {
+  PAGE_LANDER_STATUS,
+  PAGE_LANDER_SENSORS,
+  PAGE_ROVER,
+  PAGE_DRONE,
+  PAGE_MARS_FACT,
+  PAGE_COUNT
+};
+
+// ============================================================
+// REMOTE DISPLAY DATA
+// ============================================================
+
+struct RoverData {
+  bool hasUpdate = false;
+  bool connected = false;
+
+  uint32_t lastUpdateMs = 0;
+
+  bool distanceValid = false;
+  bool pitchValid = false;
+  bool rollValid = false;
+
+  float distance = NAN;
+  float pitch = NAN;
+  float roll = NAN;
+
+  String command = "";
+  String mode = "";
+};
+
+struct DroneData {
+  bool hasUpdate = false;
+  bool connected = false;
+
+  uint32_t lastUpdateMs = 0;
+
+  String flightStatus = "";
+
+  bool latitudeValid = false;
+  bool longitudeValid = false;
+
+  float latitude = NAN;
+  float longitude = NAN;
+};
+
+// ============================================================
+// HARDWARE OBJECTS
+// ============================================================
+
+WiFiClient gGatewayClient;
+
+LiquidCrystal_I2C gLcd(
+    LCD_ADDRESS,
+    LCD_COLUMNS,
+    LCD_ROWS
+);
+
+Adafruit_BMP280 gBmp;
+
+DHT gDht(
+    PIN_DHT,
+    DHT_TYPE
+);
+
+// ============================================================
+// GLOBAL STATE
+// ============================================================
+
+OperatingMode gMode = OPMODE_ACTIVE;
+
+SensorState gBmpState = SENSOR_NO_DATA;
+SensorState gDhtState = SENSOR_NO_DATA;
+
+bool gLcdPresent = false;
+bool gBmpReady = false;
+bool gWifiConnecting = false;
+
+float gBmpTemperatureC = NAN;
+float gPressureHpa = NAN;
+
+float gDhtTemperatureC = NAN;
+float gHumidityPct = NAN;
+
+uint32_t gLastSensorPollMs = 0;
+uint32_t gLastTelemetryMs = 0;
+
+uint32_t gLastWifiAttemptMs = 0;
+uint32_t gLastTcpAttemptMs = 0;
+
+uint32_t gLastBmpRetryMs = 0;
+uint32_t gLastLcdPageChangeMs = 0;
+
+LcdPage gLcdPage = PAGE_LANDER_STATUS;
+
+size_t gMarsFactIndex = 0;
+
+RoverData gRover;
+DroneData gDrone;
+
+char gTcpLine[TCP_BUFFER_SIZE];
+
+size_t gTcpLineLength = 0;
+
+bool gTcpLineOverflow = false;
+
+char gLcdCache[LCD_ROWS][LCD_COLUMNS + 1] = {{0}};
+
+// ============================================================
+// MARS FUN FACTS
+// ============================================================
+
+struct MarsFact {
+  const char *line3;
+  const char *line4;
+};
+
+const MarsFact gMarsFacts[] = {
+  {"A DAY ON MARS", "LASTS 24H 39M (SOL)"},
+  {"A YEAR ON MARS", "ABOUT 687 EARTH DAYS"},
+  {"MARS HAS 2 MOONS", "PHOBOS AND DEIMOS"},
+  {"MARS LOOKS RED", "IRON-RICH DUST"},
+  {"OLYMPUS MONS", "A GIANT VOLCANO"},
+  {"VALLES MARINERIS", "A VAST MARTIAN CANYON"},
+  {"MARS IS COLD", "AVG ABOUT -63 C"},
+  {"AIR IS VERY THIN", "MOSTLY CARBON DIOXIDE"},
+  {"PERSEVERANCE", "LANDED IN 2021"},
+  {"INGENUITY", "FIRST POWERED MARS FLIGHT"},
+  {"MANGALYAAN", "MARS ORBIT IN 2014"},
+  {"ISRO'S MARS PROBE", "INDIA: 4TH TO REACH MARS"},
+  {"EARTH-MARS GAP", "CHANGES AS THEY ORBIT"},
+  {"MARS FROM SUN", "AVG ABOUT 228 MILLION KM"},
+  {"MARS GRAVITY", "ABOUT 38% OF EARTH'S"},
+  {"SUNLIGHT TO MARS", "TAKES ABOUT 13 MIN AVG"},
+  {"MARS HAS SEASONS", "AXIS TILTS LIKE EARTH"},
+  {"DUST STORMS", "CAN SPREAD VERY WIDE"},
+  {"WATER ICE EXISTS", "NEAR THE POLAR REGIONS"},
+  {"MARS HAS NO", "GLOBAL MAGNETIC FIELD"}
+};
+
+static constexpr size_t MARS_FACT_COUNT =
+    sizeof(gMarsFacts) / sizeof(gMarsFacts[0]);
+
+// ============================================================
+// GENERAL HELPERS
+// ============================================================
+
+const char *modeName() {
+  return gMode == OPMODE_ACTIVE ? "ACTIVE" : "STANDBY";
 }
 
-static const char* sensorStateName(SensorState state) {
+const char *sensorStateName(SensorState state) {
   switch (state) {
-    case SENSOR_OK: return "OK";
-    case SENSOR_FAILED: return "FAILED";
-    default: return "NO_DATA";
+    case SENSOR_OK:
+      return "OK";
+
+    case SENSOR_FAILED:
+      return "FAILED";
+
+    default:
+      return "NO_DATA";
   }
 }
 
-static bool finiteInRange(float value, float low, float high) {
-  return isfinite(value) && value >= low && value <= high;
+bool finiteValue(float value) {
+  return !isnan(value) && !isinf(value);
 }
 
-static bool wifiConfigured() {
-  return WIFI_SSID[0] != '\0' && GATEWAY_HOST[0] != '\0';
+float round1(float value) {
+  return roundf(value * 10.0f) / 10.0f;
 }
 
-// Operational JSON goes to the Wi-Fi/TCP gateway ONLY. USB serial carries
-// human-readable debug text only (see debugLog).
-static void sendJson(JsonDocument& doc) {
-  if (!gGatewayClient.connected()) return;
-  serializeJson(doc, gGatewayClient);
-  gGatewayClient.print('\n');
+void clearSensorValues() {
+  gBmpTemperatureC = NAN;
+  gPressureHpa = NAN;
+
+  gDhtTemperatureC = NAN;
+  gHumidityPct = NAN;
+
+  gBmpState = SENSOR_NO_DATA;
+  gDhtState = SENSOR_NO_DATA;
 }
 
-static void debugLog(const char* msg) {
-  Serial.print("[lander] ");
-  Serial.println(msg);
+void setNullableFloat(
+    JsonDocument &doc,
+    const char *key,
+    float value,
+    bool valid
+) {
+  if (valid && finiteValue(value)) {
+    doc[key] = round1(value);
+  } else {
+    doc[key] = nullptr;
+  }
 }
 
-static void setNullableFloat(JsonDocument& doc, const char* key, bool ok, float value) {
-  if (ok && isfinite(value)) doc[key] = value;
-  else doc[key] = nullptr;
+// ============================================================
+// TCP JSON OUTPUT
+// ============================================================
+
+bool sendJson(JsonDocument &doc) {
+  if (!gGatewayClient.connected()) {
+    return false;
+  }
+
+  if (serializeJson(doc, gGatewayClient) == 0) {
+    return false;
+  }
+
+  gGatewayClient.write('\n');
+
+  return true;
 }
 
-static void sendAck(int32_t requestId, bool hasId, bool accepted, const char* reason = nullptr) {
+void sendAck(
+    const char *command,
+    bool ok,
+    const char *message,
+    int32_t requestId = -1
+) {
   JsonDocument doc;
+
   doc["type"] = "command_ack";
-  if (hasId) doc["request_id"] = requestId;
-  doc["accepted"] = accepted;
-  if (reason) doc["reason"] = reason;
-  else doc["reason"] = nullptr;
-  sendJson(doc);
-}
-
-static void sendModeStatus(int32_t requestId, bool hasId) {
-  JsonDocument doc;
-  doc["type"] = "mode_status";
-  if (hasId) doc["request_id"] = requestId;
-  doc["mode"] = modeName(gMode);
-  sendJson(doc);
-}
-
-static void sendStatus(int32_t requestId, bool hasId) {
-  JsonDocument doc;
-  doc["type"] = "status";
-  if (hasId) doc["request_id"] = requestId;
-  doc["timestamp_ms"] = millis() - gClockStart;
-  doc["mode"] = modeName(gMode);
-  doc["sensors_polling"] = gMode == OPMODE_ACTIVE;
-  doc["bmp280_ok"] = gBmpState == SENSOR_OK;
-  doc["dht11_ok"] = gDhtState == SENSOR_OK;
-  doc["bmp280_state"] = sensorStateName(gBmpState);
-  doc["dht11_state"] = sensorStateName(gDhtState);
-  doc["firmware"] = FIRMWARE_VERSION;
-  sendJson(doc);
-}
-
-static void sendTelemetry(uint32_t now) {
-  JsonDocument doc;
-  doc["type"] = "telemetry";
-  doc["timestamp_ms"] = now - gClockStart;
-  doc["mode"] = modeName(gMode);
-  setNullableFloat(doc, "bmp_temperature_c", gBmpState == SENSOR_OK, gBmpTemp);
-  setNullableFloat(doc, "pressure_hpa", gBmpState == SENSOR_OK, gPressure);
-  setNullableFloat(doc, "dht_temperature_c", gDhtState == SENSOR_OK, gDhtTemp);
-  setNullableFloat(doc, "humidity_pct", gDhtState == SENSOR_OK, gHumidity);
-  doc["bmp280_ok"] = gBmpState == SENSOR_OK;
-  doc["dht11_ok"] = gDhtState == SENSOR_OK;
-  sendJson(doc);
-}
-
-// ============================================================================
-//  SECTION 4: SENSORS
-// ============================================================================
-
-static void pollSensors(uint32_t now) {
-  if (gMode != OPMODE_ACTIVE) return;
-  if (!gBmpReady && (gLastBmpAttempt == 0 || now - gLastBmpAttempt >= BMP_RETRY_MS)) {
-    gLastBmpAttempt = now;
-    gBmpReady = gBmp.begin(BMP280_ADDR_A) || gBmp.begin(BMP280_ADDR_B);
-    if (!gBmpReady) gBmpState = SENSOR_FAILED;
+  doc["timestamp_ms"] = millis();
+  doc["command"] = command;
+  doc["ok"] = ok;
+  doc["accepted"] = ok;
+  doc["message"] = message;
+  doc["reason"] = message;
+  if (requestId >= 0) {
+    doc["request_id"] = requestId;
   }
+
+  sendJson(doc);
+}
+
+void sendModeStatus(int32_t requestId = -1) {
+  JsonDocument doc;
+
+  doc["type"] = "mode_status";
+  doc["timestamp_ms"] = millis();
+  doc["mode"] = modeName();
+  if (requestId >= 0) {
+    doc["request_id"] = requestId;
+  }
+
+  sendJson(doc);
+}
+
+void sendStatus(int32_t requestId = -1) {
+  JsonDocument doc;
+
+  doc["type"] = "status";
+  doc["timestamp_ms"] = millis();
+  if (requestId >= 0) {
+    doc["request_id"] = requestId;
+  }
+
+  doc["mode"] = modeName();
+
+  doc["sensors_polling"] =
+      gMode == OPMODE_ACTIVE;
+
+  doc["bmp280_ok"] =
+      gBmpState == SENSOR_OK;
+
+  doc["dht11_ok"] =
+      gDhtState == SENSOR_OK;
+
+  doc["bmp280_state"] =
+      sensorStateName(gBmpState);
+
+  doc["dht11_state"] =
+      sensorStateName(gDhtState);
+
+  doc["firmware"] = FIRMWARE_VERSION;
+
+  sendJson(doc);
+}
+
+void sendTelemetry() {
+  JsonDocument doc;
+
+  doc["type"] = "telemetry";
+  doc["timestamp_ms"] = millis();
+  doc["mode"] = modeName();
+
+  setNullableFloat(
+      doc,
+      "bmp_temperature_c",
+      gBmpTemperatureC,
+      gBmpState == SENSOR_OK
+  );
+
+  setNullableFloat(
+      doc,
+      "pressure_hpa",
+      gPressureHpa,
+      gBmpState == SENSOR_OK
+  );
+
+  setNullableFloat(
+      doc,
+      "dht_temperature_c",
+      gDhtTemperatureC,
+      gDhtState == SENSOR_OK
+  );
+
+  setNullableFloat(
+      doc,
+      "humidity_pct",
+      gHumidityPct,
+      gDhtState == SENSOR_OK
+  );
+
+  doc["bmp280_ok"] =
+      gBmpState == SENSOR_OK;
+
+  doc["dht11_ok"] =
+      gDhtState == SENSOR_OK;
+
+  sendJson(doc);
+}
+
+// ============================================================
+// JSON INPUT HELPERS
+// ============================================================
+
+bool readNumber(
+    JsonVariantConst value,
+    float &out
+) {
+  if (value.isNull()) {
+    return false;
+  }
+
+  if (!(value.is<float>() ||
+        value.is<double>() ||
+        value.is<int>() ||
+        value.is<long>() ||
+        value.is<unsigned int>() ||
+        value.is<unsigned long>())) {
+    return false;
+  }
+
+  float number = value.as<float>();
+
+  if (!finiteValue(number)) {
+    return false;
+  }
+
+  out = number;
+
+  return true;
+}
+
+// ============================================================
+// ROVER / DRONE DISPLAY MESSAGE HANDLING
+// ============================================================
+
+void handleMissionDisplay(JsonObjectConst root) {
+  const char *device = root["device"] | "";
+
+  const bool connected =
+      root["connected"] | false;
+
+  JsonObjectConst data =
+      root["data"].as<JsonObjectConst>();
+
+  if (strcmp(device, "rover") == 0) {
+    gRover.hasUpdate = true;
+    gRover.connected = connected;
+    gRover.lastUpdateMs = millis();
+
+    if (!data.isNull()) {
+      gRover.distanceValid =
+          readNumber(data["distance"], gRover.distance);
+
+      gRover.pitchValid =
+          readNumber(data["pitch"], gRover.pitch);
+
+      gRover.rollValid =
+          readNumber(data["roll"], gRover.roll);
+
+      gRover.command =
+          data["cmd"].is<const char *>()
+              ? data["cmd"].as<String>()
+              : "";
+
+      gRover.mode =
+          data["mode"].is<const char *>()
+              ? data["mode"].as<String>()
+              : "";
+    }
+  }
+
+  else if (strcmp(device, "drone") == 0) {
+    gDrone.hasUpdate = true;
+    gDrone.connected = connected;
+    gDrone.lastUpdateMs = millis();
+
+    if (!data.isNull()) {
+      gDrone.flightStatus =
+          data["flight_status"].is<const char *>()
+              ? data["flight_status"].as<String>()
+              : "";
+
+      gDrone.latitudeValid =
+          readNumber(data["latitude"], gDrone.latitude);
+
+      gDrone.longitudeValid =
+          readNumber(data["longitude"], gDrone.longitude);
+    }
+  }
+}
+
+// ============================================================
+// COMMAND HANDLING
+// ============================================================
+
+void setActiveMode() {
+  gMode = OPMODE_ACTIVE;
+
+  clearSensorValues();
+
+  uint32_t now = millis();
+
+  gLastSensorPollMs =
+      now - SENSOR_POLL_MS + 1000;
+
+  gLastTelemetryMs = now;
+
+  gLcdPage = PAGE_LANDER_STATUS;
+
+  gLastLcdPageChangeMs = now;
+}
+
+void processIncomingJson(char *line) {
+  JsonDocument doc;
+
+  DeserializationError error =
+      deserializeJson(doc, line);
+
+  if (error) {
+    Serial.printf(
+        "[TCP] Invalid JSON: %s\n",
+        error.c_str()
+    );
+
+    return;
+  }
+
+  const char *type =
+      doc["type"] | "";
+
+  // New additive message type for remote LCD pages.
+  if (strcmp(type, "mission_display") == 0) {
+    handleMissionDisplay(
+        doc.as<JsonObjectConst>()
+    );
+
+    return;
+  }
+
+  // Existing gateway command format remains supported.
+  const char *command =
+      doc["command"] | "";
+
+  const bool hasId = doc["request_id"].is<int32_t>();
+  const int32_t requestId = hasId ? doc["request_id"].as<int32_t>() : -1;
+
+  if (strcmp(command, "GET_STATUS") == 0) {
+    sendAck(
+        command,
+        true,
+        "Status sent",
+        requestId
+    );
+
+    sendStatus(requestId);
+    sendModeStatus(requestId);
+  }
+
+  else if (strcmp(command, "SET_ACTIVE") == 0) {
+    setActiveMode();
+
+    sendAck(
+        command,
+        true,
+        "Lander active; sensor polling enabled",
+        requestId
+    );
+
+    sendModeStatus(requestId);
+    sendStatus(requestId);
+  }
+
+  else if (strcmp(command, "SET_STANDBY") == 0) {
+    gMode = OPMODE_STANDBY;
+
+    clearSensorValues();
+
+    gLcdPage = PAGE_LANDER_STATUS;
+    gLastLcdPageChangeMs = millis();
+
+    sendAck(
+        command,
+        true,
+        "Lander standby; sensor polling paused",
+        requestId
+    );
+
+    sendModeStatus(requestId);
+    sendStatus(requestId);
+  }
+
+  else if (command[0] != '\0') {
+    sendAck(
+        command,
+        false,
+        "Unknown command",
+        requestId
+    );
+  }
+
+  else {
+    Serial.println(
+        "[TCP] JSON message had no recognized type/command"
+    );
+  }
+}
+
+// ============================================================
+// TCP INPUT
+// ============================================================
+
+void readTcpMessages() {
+  while (
+      gGatewayClient.connected() &&
+      gGatewayClient.available()
+  ) {
+    int incoming = gGatewayClient.read();
+
+    if (incoming < 0) {
+      break;
+    }
+
+    char c = static_cast<char>(incoming);
+
+    if (c == '\n') {
+      if (!gTcpLineOverflow &&
+          gTcpLineLength > 0) {
+
+        gTcpLine[gTcpLineLength] = '\0';
+
+        // Accept CRLF and LF.
+        if (gTcpLineLength > 0 &&
+            gTcpLine[gTcpLineLength - 1] == '\r') {
+          gTcpLine[gTcpLineLength - 1] = '\0';
+        }
+
+        processIncomingJson(gTcpLine);
+      }
+
+      gTcpLineLength = 0;
+      gTcpLineOverflow = false;
+    }
+
+    else if (!gTcpLineOverflow) {
+      if (gTcpLineLength + 1 < TCP_BUFFER_SIZE) {
+        gTcpLine[gTcpLineLength++] = c;
+      }
+
+      else {
+        gTcpLineOverflow = true;
+        gTcpLineLength = 0;
+
+        Serial.println(
+            "[TCP] Oversized JSON line discarded"
+        );
+      }
+    }
+  }
+}
+
+// ============================================================
+// WIFI EVENTS
+// ============================================================
+
+void onWiFiEvent(WiFiEvent_t event) {
+  switch (event) {
+    case ARDUINO_EVENT_WIFI_STA_START:
+      Serial.println("[WiFi] Station started");
+      break;
+
+    case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+      Serial.println("[WiFi] Associated with access point");
+      gWifiConnecting = false;
+      break;
+
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+      Serial.print("[WiFi] IP: ");
+      Serial.println(WiFi.localIP());
+
+      gWifiConnecting = false;
+      break;
+
+    case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+      Serial.println("[WiFi] Disconnected");
+
+      gWifiConnecting = false;
+
+      gGatewayClient.stop();
+      break;
+
+    default:
+      break;
+  }
+}
+
+void scanWiFiNetworks() {
+  Serial.println("[WiFi] Scanning...");
+
+  int count = WiFi.scanNetworks(false, true);
+
+  bool found = false;
+
+  if (count < 0) {
+    Serial.println("[WiFi] Scan failed");
+    return;
+  }
+
+  for (int i = 0; i < count; ++i) {
+    String ssid = WiFi.SSID(i);
+
+    Serial.printf(
+        "[WiFi] %s (%d dBm)\n",
+        ssid.c_str(),
+        WiFi.RSSI(i)
+    );
+
+    if (ssid == WIFI_SSID) {
+      found = true;
+    }
+  }
+
+  Serial.println(
+      found
+          ? "[WiFi] Mission-Control found"
+          : "[WiFi] Mission-Control not found"
+  );
+
+  WiFi.scanDelete();
+}
+
+void startWiFiConnection() {
+  gLastWifiAttemptMs = millis();
+
+  gWifiConnecting = true;
+
+  Serial.printf(
+      "[WiFi] Connecting to '%s'\n",
+      WIFI_SSID
+  );
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+}
+
+void maintainWiFi() {
+  if (WiFi.status() == WL_CONNECTED) {
+    return;
+  }
+
+  if (!gWifiConnecting &&
+      millis() - gLastWifiAttemptMs >= WIFI_RETRY_MS) {
+    startWiFiConnection();
+  }
+}
+
+// ============================================================
+// TCP CONNECTION MANAGEMENT
+// ============================================================
+
+void maintainTcpConnection() {
+  if (WiFi.status() != WL_CONNECTED) {
+    gGatewayClient.stop();
+    return;
+  }
+
+  if (gGatewayClient.connected()) {
+    readTcpMessages();
+    return;
+  }
+
+  gGatewayClient.stop();
+
+  uint32_t now = millis();
+
+  if (now - gLastTcpAttemptMs < TCP_RETRY_MS) {
+    return;
+  }
+
+  gLastTcpAttemptMs = now;
+
+  Serial.printf(
+      "[TCP] Connecting to %s:%u\n",
+      GATEWAY_HOST,
+      GATEWAY_TCP_PORT
+  );
+
+  gGatewayClient.setNoDelay(true);
+  gGatewayClient.setTimeout(100);
+
+  if (gGatewayClient.connect(GATEWAY_HOST, GATEWAY_TCP_PORT)) {
+    Serial.println("[TCP] Gateway connected");
+
+    gTcpLineLength = 0;
+    gTcpLineOverflow = false;
+
+    sendStatus();
+    sendModeStatus();
+  }
+
+  else {
+    Serial.println("[TCP] Connection failed");
+  }
+}
+
+// ============================================================
+// BMP280 INITIALIZATION
+// ============================================================
+
+bool beginBmpSensor() {
+  if (gBmp.begin(0x76)) {
+    Serial.println("[BMP280] Found at 0x76");
+    return true;
+  }
+
+  if (gBmp.begin(0x77)) {
+    Serial.println("[BMP280] Found at 0x77");
+    return true;
+  }
+
+  Serial.println(
+      "[BMP280] Not found at 0x76 or 0x77"
+  );
+
+  return false;
+}
+
+// ============================================================
+// SENSOR POLLING
+// ============================================================
+
+void pollSensors() {
+  if (gMode != OPMODE_ACTIVE) {
+    return;
+  }
+
+  uint32_t now = millis();
+
+  if (now - gLastSensorPollMs < SENSOR_POLL_MS) {
+    return;
+  }
+
+  gLastSensorPollMs = now;
+
+  // Retry BMP280 initialization after failure.
+  if (!gBmpReady &&
+      now - gLastBmpRetryMs >= BMP_RETRY_MS) {
+    gLastBmpRetryMs = now;
+
+    gBmpReady = beginBmpSensor();
+  }
+
+  // BMP280: temperature and pressure.
   if (gBmpReady) {
-    const float temperature = gBmp.readTemperature();
-    const float pressure = gBmp.readPressure() / 100.0f;
-    if (finiteInRange(temperature, BMP_TEMP_MIN_C, BMP_TEMP_MAX_C) &&
-        finiteInRange(pressure, BMP_PRESS_MIN_HPA, BMP_PRESS_MAX_HPA)) {
-      gBmpTemp = roundf(temperature * 10.0f) / 10.0f;
-      gPressure = roundf(pressure * 10.0f) / 10.0f;
+    float temp = gBmp.readTemperature();
+    float pressurePa = gBmp.readPressure();
+
+    if (finiteValue(temp) &&
+        temp >= -40 &&
+        temp <= 85 &&
+        finiteValue(pressurePa) &&
+        pressurePa >= 30000 &&
+        pressurePa <= 110000) {
+
+      gBmpTemperatureC = round1(temp);
+
+      gPressureHpa =
+          round1(pressurePa / 100.0f);
+
       gBmpState = SENSOR_OK;
-    } else {
-      gBmpTemp = gPressure = NAN;
+    }
+
+    else {
+      gBmpTemperatureC = NAN;
+      gPressureHpa = NAN;
+
       gBmpState = SENSOR_FAILED;
       gBmpReady = false;
+
+      gLastBmpRetryMs = now;
     }
   }
-  const float temperature = gDht.readTemperature();
-  const float humidity = gDht.readHumidity();
-  if (finiteInRange(temperature, DHT_TEMP_MIN_C, DHT_TEMP_MAX_C) &&
-      finiteInRange(humidity, DHT_HUM_MIN_PCT, DHT_HUM_MAX_PCT)) {
-    gDhtTemp = roundf(temperature * 10.0f) / 10.0f;
-    gHumidity = roundf(humidity * 10.0f) / 10.0f;
+
+  else {
+    gBmpState = SENSOR_FAILED;
+  }
+
+  // DHT11: temperature and humidity.
+  float temp = gDht.readTemperature();
+  float humidity = gDht.readHumidity();
+
+  if (finiteValue(temp) &&
+      temp >= -10 &&
+      temp <= 60 &&
+      finiteValue(humidity) &&
+      humidity >= 0 &&
+      humidity <= 100) {
+
+    gDhtTemperatureC = round1(temp);
+    gHumidityPct = round1(humidity);
+
     gDhtState = SENSOR_OK;
-  } else {
-    gDhtTemp = gHumidity = NAN;
+  }
+
+  else {
+    gDhtTemperatureC = NAN;
+    gHumidityPct = NAN;
+
     gDhtState = SENSOR_FAILED;
   }
+
+  Serial.printf(
+      "[Sensors] BMP=%s DHT=%s\n",
+      sensorStateName(gBmpState),
+      sensorStateName(gDhtState)
+  );
 }
 
-// ============================================================================
-//  SECTION 5: LCD
-// ============================================================================
+// ============================================================
+// PERIODIC TELEMETRY
+// ============================================================
 
-static void printLcdLine(uint8_t row, const String& text) {
-  if (!gLcdOk) return;
-  static String cached[4];
-  if (row >= LCD_ROWS || (!gLcdNeedsRefresh && cached[row] == text)) return;
+void maintainTelemetry() {
+  uint32_t now = millis();
+
+  if (now - gLastTelemetryMs >= TELEMETRY_MS) {
+    gLastTelemetryMs = now;
+
+    sendTelemetry();
+  }
+}
+
+// ============================================================
+// LCD HELPERS
+// ============================================================
+
+String fitLine(String text) {
+  if (text.length() > LCD_COLUMNS) {
+    text.remove(LCD_COLUMNS);
+  }
+
+  while (text.length() < LCD_COLUMNS) {
+    text += ' ';
+  }
+
+  return text;
+}
+
+void lcdLine(uint8_t row, String text) {
+  if (!gLcdPresent || row >= LCD_ROWS) {
+    return;
+  }
+
+  text = fitLine(text);
+
+  if (strncmp(
+          gLcdCache[row],
+          text.c_str(),
+          LCD_COLUMNS
+      ) == 0) {
+    return;
+  }
+
+  memcpy(
+      gLcdCache[row],
+      text.c_str(),
+      LCD_COLUMNS
+  );
+
+  gLcdCache[row][LCD_COLUMNS] = '\0';
+
   gLcd.setCursor(0, row);
-  for (uint8_t column = 0; column < LCD_COLS; ++column) {
-    gLcd.print(column < text.length() ? text[column] : ' ');
-  }
-  cached[row] = text;
+  gLcd.print(text);
 }
 
-static void renderLcd(uint32_t now) {
-  if (!gLcdOk) return;
-  if (now - gLastLcdRotate >= LCD_ROTATE_MS) {
-    gLastLcdRotate = now;
-    gLcdPage = (gLcdPage + 1) % 4;
-    gLcdNeedsRefresh = true;
+void renderLines(
+    String line1,
+    String line2,
+    String line3,
+    String line4
+) {
+  lcdLine(0, line1);
+  lcdLine(1, line2);
+  lcdLine(2, line3);
+  lcdLine(3, line4);
+}
+
+String valueOrNA(
+    float value,
+    bool valid,
+    uint8_t decimals = 1
+) {
+  if (!valid || !finiteValue(value)) {
+    return "N/A";
   }
+
+  return String(value, (unsigned int)decimals);
+}
+
+String remoteState(
+    bool hasData,
+    bool connected,
+    uint32_t lastUpdate
+) {
+  if (!hasData) {
+    return "WAIT";
+  }
+
+  if (!connected ||
+      millis() - lastUpdate > REMOTE_TIMEOUT_MS) {
+    return "OFFLINE";
+  }
+
+  return "OK";
+}
+
+// ============================================================
+// LCD PAGE 1: LANDER STATUS
+// ============================================================
+
+void renderLanderStatus() {
+  renderLines(
+      "MARS LANDER",
+      String("MODE: ") + modeName(),
+      String("WIFI: ") +
+          (WiFi.status() == WL_CONNECTED
+               ? "CONNECTED"
+               : "OFFLINE"),
+      String("GATEWAY TCP: ") +
+          (gGatewayClient.connected()
+               ? "OK"
+               : "WAIT")
+  );
+}
+
+// ============================================================
+// LCD PAGE 2: LANDER SENSORS
+// ============================================================
+
+void renderLanderSensors() {
+  renderLines(
+      "MARS LANDER",
+
+      String("DHT TEMP: ") +
+          valueOrNA(
+              gDhtTemperatureC,
+              gDhtState == SENSOR_OK
+          ) + " C",
+
+      String("HUMIDITY: ") +
+          valueOrNA(
+              gHumidityPct,
+              gDhtState == SENSOR_OK
+          ) + " %",
+
+      String("BMP PRESS: ") +
+          valueOrNA(
+              gPressureHpa,
+              gBmpState == SENSOR_OK
+          ) + " hPa"
+  );
+}
+
+// ============================================================
+// LCD PAGE 3: ROVER
+// ============================================================
+
+void renderRover() {
+  String state = remoteState(
+      gRover.hasUpdate,
+      gRover.connected,
+      gRover.lastUpdateMs
+  );
+
+  String line3;
+  String line4;
+
+  if (state == "WAIT") {
+    line3 = "WAITING FOR DATA";
+    line4 = "NO ROVER TELEMETRY";
+  }
+
+  else if (state == "OFFLINE") {
+    line3 = "LINK OFFLINE";
+    line4 = "LAST DATA NOT LIVE";
+  }
+
+  else {
+    line3 =
+        String("DIST: ") +
+        valueOrNA(
+            gRover.distance,
+            gRover.distanceValid,
+            1
+        );
+
+    line4 =
+        String("P:") +
+        valueOrNA(
+            gRover.pitch,
+            gRover.pitchValid,
+            1
+        ) +
+        " R:" +
+        valueOrNA(
+            gRover.roll,
+            gRover.rollValid,
+            1
+        );
+  }
+
+  renderLines(
+      "MARS ROVER",
+      String("CONNECTION: ") + state,
+      line3,
+      line4
+  );
+}
+
+// ============================================================
+// LCD PAGE 4: DRONE
+// ============================================================
+
+void renderDrone() {
+  String state = remoteState(
+      gDrone.hasUpdate,
+      gDrone.connected,
+      gDrone.lastUpdateMs
+  );
+
+  String line2;
+  String line3;
+  String line4;
+
+  if (state == "WAIT") {
+    line2 = "STATUS: WAIT";
+    line3 = "WAITING FOR DATA";
+    line4 = "DRONE LINK PENDING";
+  }
+
+  else if (state == "OFFLINE") {
+    line2 = "STATUS: OFFLINE";
+    line3 = "LINK OFFLINE";
+    line4 = "LAST DATA NOT LIVE";
+  }
+
+  else {
+    line2 =
+        gDrone.flightStatus.length()
+            ? (String("STATUS: ") + gDrone.flightStatus)
+            : "STATUS: OK";
+
+    if (gDrone.latitudeValid &&
+        gDrone.longitudeValid) {
+
+      line3 =
+          String("LAT: ") +
+          String(gDrone.latitude, 4);
+
+      line4 =
+          String("LON: ") +
+          String(gDrone.longitude, 4);
+    }
+
+    else {
+      line3 = "GPS: NOT AVAILABLE";
+      line4 = "NO COORDINATES";
+    }
+  }
+
+  renderLines(
+      "MARS DRONE",
+      line2,
+      line3,
+      line4
+  );
+}
+
+// ============================================================
+// LCD PAGE ROTATION
+// ============================================================
+
+void advanceLcdPage() {
+  gLcdPage = static_cast<LcdPage>(
+      (static_cast<uint8_t>(gLcdPage) + 1) %
+      static_cast<uint8_t>(PAGE_COUNT)
+  );
+
+  if (gLcdPage == PAGE_MARS_FACT) {
+    gMarsFactIndex =
+        (gMarsFactIndex + 1) % MARS_FACT_COUNT;
+  }
+
+  gLastLcdPageChangeMs = millis();
+}
+
+uint32_t pageDuration() {
+  if (gLcdPage == PAGE_LANDER_STATUS ||
+      gLcdPage == PAGE_LANDER_SENSORS) {
+    return LCD_LANDER_MS;
+  }
+
+  if (gLcdPage == PAGE_ROVER ||
+      gLcdPage == PAGE_DRONE) {
+    return LCD_REMOTE_MS;
+  }
+
+  return LCD_FACT_MS;
+}
+
+void updateLcd() {
+  if (!gLcdPresent) {
+    return;
+  }
+
   if (gMode == OPMODE_STANDBY) {
-    printLcdLine(0, "LANDER STANDBY");
-    printLcdLine(1, "Sensors paused");
-    printLcdLine(2, "Wi-Fi link available");
-    printLcdLine(3, "Mission Control");
-    gLcdNeedsRefresh = false;
+    renderLines(
+        "MARS LANDER",
+        "MODE: STANDBY",
+        "SENSORS: PAUSED",
+        gGatewayClient.connected()
+            ? "GATEWAY TCP: OK"
+            : "GATEWAY TCP: WAIT"
+    );
+
     return;
   }
-  if (gLcdPage == 0) {
-    printLcdLine(0, "MARS LANDER ACTIVE");
-    printLcdLine(1, String("BMP280: ") + sensorStateName(gBmpState));
-    printLcdLine(2, String("DHT11 : ") + sensorStateName(gDhtState));
-    printLcdLine(3, gGatewayClient.connected() ? "WIFI: CONNECTED" : "WIFI: WAITING");
-  } else if (gLcdPage == 1) {
-    printLcdLine(0, "BMP280 TEMPERATURE");
-    printLcdLine(1, gBmpState == SENSOR_OK ? String(gBmpTemp, 1) + " C" : "-- C");
-    printLcdLine(2, "PRESSURE");
-    printLcdLine(3, gBmpState == SENSOR_OK ? String(gPressure, 1) + " hPa" : "-- hPa");
-  } else if (gLcdPage == 2) {
-    printLcdLine(0, "DHT11 TEMPERATURE");
-    printLcdLine(1, gDhtState == SENSOR_OK ? String(gDhtTemp, 1) + " C" : "-- C");
-    printLcdLine(2, "HUMIDITY");
-    printLcdLine(3, gDhtState == SENSOR_OK ? String(gHumidity, 1) + " %" : "-- %");
-  } else {
-    printLcdLine(0, "MISSION LINK STATUS");
-    printLcdLine(1, "LANDER: ACTIVE");
-    printLcdLine(2, "ROVER: SEE CONTROL");
-    printLcdLine(3, "DRONE: INTERFACE TBD");
+
+  if (millis() - gLastLcdPageChangeMs >= pageDuration()) {
+    advanceLcdPage();
   }
-  gLcdNeedsRefresh = false;
-}
 
-// ============================================================================
-//  SECTION 6: WS2812B AND STATUS LEDs
-// ============================================================================
+  switch (gLcdPage) {
+    case PAGE_LANDER_STATUS:
+      renderLanderStatus();
+      break;
 
-static void animateStrip(uint32_t now) {
-  if (now - gLastAnimation < ANIM_INTERVAL_MS) return;
-  gLastAnimation = now;
-  for (uint16_t i = 0; i < NUM_LEDS; ++i) {
-    const uint16_t hue = (uint16_t)(42500 + i * 10000UL / NUM_LEDS + now / 8);
-    const uint8_t value = (uint8_t)(80 + 65 * (0.5f + 0.5f * sinf((now / 600.0f) + i * 0.5f)));
-    gStrip.setPixelColor(i, gStrip.ColorHSV(hue, 220, value));
-  }
-  gStrip.show();
-}
+    case PAGE_LANDER_SENSORS:
+      renderLanderSensors();
+      break;
 
-static void updateStatusLeds() {
-  digitalWrite(PIN_LED_GREEN, gMode == OPMODE_ACTIVE ? HIGH : LOW);
-  // Red indicates a reported sensor fault; STANDBY has no current sensor read.
-  const bool sensorFault = gMode == OPMODE_ACTIVE &&
-      (gBmpState == SENSOR_FAILED || gDhtState == SENSOR_FAILED);
-  digitalWrite(PIN_LED_RED, sensorFault ? HIGH : LOW);
-}
+    case PAGE_ROVER:
+      renderRover();
+      break;
 
-// ============================================================================
-//  SECTION 7: COMMANDS AND WI-FI / TCP LINK
-// ============================================================================
+    case PAGE_DRONE:
+      renderDrone();
+      break;
 
-static void processCommand(const char* line) {
-  JsonDocument doc;
-  if (deserializeJson(doc, line) || !doc.is<JsonObject>()) return;
-  const char* command = doc["command"] | "";
-  const bool hasId = doc["request_id"].is<int32_t>();
-  const int32_t requestId = hasId ? doc["request_id"].as<int32_t>() : 0;
-  if (!strcmp(command, "GET_STATUS")) {
-    sendAck(requestId, hasId, true);
-    sendStatus(requestId, hasId);
-  } else if (!strcmp(command, "SET_ACTIVE")) {
-    gMode = OPMODE_ACTIVE;
-    gLastSensorPoll = 0;
-    gLcdNeedsRefresh = true;
-    sendAck(requestId, hasId, true);
-    sendModeStatus(requestId, hasId);
-    updateStatusLeds();
-  } else if (!strcmp(command, "SET_STANDBY")) {
-    gMode = OPMODE_STANDBY;
-    gLcdNeedsRefresh = true;
-    gBmpTemp = gPressure = gDhtTemp = gHumidity = NAN;
-    gBmpState = gDhtState = SENSOR_NO_DATA;
-    sendAck(requestId, hasId, true);
-    sendModeStatus(requestId, hasId);
-    updateStatusLeds();
-  } else {
-    sendAck(requestId, hasId, false, "INVALID_COMMAND");
-  }
-}
+    case PAGE_MARS_FACT: {
+      const MarsFact &fact =
+          gMarsFacts[gMarsFactIndex % MARS_FACT_COUNT];
 
-static void maintainWiFiLink(uint32_t now) {
-  if (!wifiConfigured()) {
-    if (!gWiFiConfigNoted) {
-      gWiFiConfigNoted = true;
-      debugLog("Wi-Fi/gateway not configured in lander.ino; running locally only");
+      renderLines(
+          "MARS FUN FACT",
+          "DID YOU KNOW?",
+          fact.line3,
+          fact.line4
+      );
+
+      break;
     }
-    return;
-  }
-  if (!gWiFiStarted) {
-    WiFi.mode(WIFI_STA);
-    WiFi.setAutoReconnect(true);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    gWiFiStarted = true;
-  }
-  if (WiFi.status() != WL_CONNECTED) {
-    if (gGatewayClient.connected()) gGatewayClient.stop();
-    if (now - gLastWiFiRetry >= WIFI_RETRY_MS) {
-      gLastWiFiRetry = now;
-      WiFi.reconnect();
-    }
-    return;
-  }
-  if (!gGatewayClient.connected() && now - gLastTcpRetry >= TCP_RETRY_MS) {
-    gLastTcpRetry = now;
-    gGatewayClient.stop();
-    gGatewayClient.setTimeout(TCP_CONNECT_TIMEOUT_MS);
-    if (gGatewayClient.connect(GATEWAY_HOST, GATEWAY_PORT)) {
-      gLcdNeedsRefresh = true;
-      sendStatus(0, false);
-    }
-  }
-  while (gGatewayClient.connected() && gGatewayClient.available() > 0) {
-    const char c = (char)gGatewayClient.read();
-    if (c == '\n') {
-      gCommandBuffer[gCommandLength] = '\0';
-      if (gCommandLength > 0) processCommand(gCommandBuffer);
-      gCommandLength = 0;
-    } else if (c != '\r') {
-      if (gCommandLength + 1 < sizeof(gCommandBuffer)) gCommandBuffer[gCommandLength++] = c;
-      else gCommandLength = 0;
-    }
+
+    default:
+      gLcdPage = PAGE_LANDER_STATUS;
+      gLastLcdPageChangeMs = millis();
+      break;
   }
 }
 
-// ============================================================================
-//  SECTION 8: setup() / loop()
-// ============================================================================
+// ============================================================
+// LED STATUS
+// ============================================================
+
+void updateLeds() {
+  digitalWrite(
+      PIN_GREEN_LED,
+      gMode == OPMODE_ACTIVE ? HIGH : LOW
+  );
+
+  bool sensorError =
+      gMode == OPMODE_ACTIVE &&
+      (
+          gBmpState == SENSOR_FAILED ||
+          gDhtState == SENSOR_FAILED
+      );
+
+  digitalWrite(
+      PIN_RED_LED,
+      sensorError && ((millis() / 300) % 2)
+          ? HIGH
+          : LOW
+  );
+}
+
+// ============================================================
+// SETUP
+// ============================================================
 
 void setup() {
-  Serial.begin(DEBUG_BAUD, SERIAL_8N1);   // programming/debug only
-  pinMode(PIN_LED_GREEN, OUTPUT);
-  pinMode(PIN_LED_RED, OUTPUT);
-  updateStatusLeds();
-  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
-  Wire.setClock(I2C_CLOCK_HZ);
-  Wire.setTimeOut(I2C_TIMEOUT_MS);
-  Wire.beginTransmission(LCD_I2C_ADDR);
-  if (Wire.endTransmission() == 0) {
+  Serial.begin(DEBUG_BAUD, SERIAL_8N1);
+
+  delay(200);
+
+  Serial.println();
+  Serial.println("========================================");
+  Serial.println("MARS LANDER FIRMWARE");
+  Serial.printf("Version: %s\n", FIRMWARE_VERSION);
+  Serial.println("========================================");
+
+  pinMode(PIN_GREEN_LED, OUTPUT);
+  pinMode(PIN_RED_LED, OUTPUT);
+
+  digitalWrite(PIN_GREEN_LED, LOW);
+  digitalWrite(PIN_RED_LED, LOW);
+
+  // Wi-Fi setup.
+  WiFi.onEvent(onWiFiEvent);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+
+  scanWiFiNetworks();
+  startWiFiConnection();
+
+  // I2C setup.
+  Wire.begin(
+      PIN_I2C_SDA,
+      PIN_I2C_SCL
+  );
+
+  Wire.setClock(100000);
+  Wire.setTimeOut(30);
+
+  // LCD detection.
+  Wire.beginTransmission(LCD_ADDRESS);
+
+  uint8_t lcdError = Wire.endTransmission();
+
+  if (lcdError == 0) {
+    gLcdPresent = true;
+
     gLcd.init();
     gLcd.backlight();
-    gLcdOk = true;
+    gLcd.clear();
+
+    memset(
+        gLcdCache,
+        0,
+        sizeof(gLcdCache)
+    );
+
+    renderLines(
+        "MARS LANDER",
+        "INITIALIZING...",
+        "SENSORS: STARTING",
+        "MISSION CONTROL"
+    );
+
+    Serial.println(
+        "[LCD] 20x4 display found at 0x27"
+    );
   }
-  gStrip.begin();
-  gStrip.setBrightness(STRIP_BRIGHTNESS);
-  gStrip.clear();
-  gStrip.show();
+
+  else {
+    Serial.printf(
+        "[LCD] Not found at 0x27 (I2C error %u)\n",
+        lcdError
+    );
+  }
+
+  // Sensor initialization.
+  gBmpReady = beginBmpSensor();
+
+  gLastBmpRetryMs = millis();
+
   gDht.begin();
-  gClockStart = millis();
-  gLastSensorPoll = millis() - SENSOR_FIRST_POLL_MS;
-  Serial.println();
-  Serial.print("[lander] boot, firmware ");
-  Serial.println(FIRMWARE_VERSION);
+
+  // Timer initialization.
+  uint32_t now = millis();
+
+  gLastSensorPollMs =
+      now - SENSOR_POLL_MS + 1000;
+
+  gLastTelemetryMs = now;
+
+  gLastWifiAttemptMs = now;
+  gLastTcpAttemptMs = now;
+
+  gLastLcdPageChangeMs = now;
+
+  gLcdPage = PAGE_LANDER_STATUS;
+
+  Serial.println("[BOOT] Setup complete");
 }
 
+// ============================================================
+// MAIN LOOP
+// ============================================================
+
 void loop() {
-  const uint32_t now = millis();
-  maintainWiFiLink(now);
-  if (gMode == OPMODE_ACTIVE && now - gLastSensorPoll >= SENSOR_POLL_MS) {
-    gLastSensorPoll = now;
-    pollSensors(now);
-  }
-  if (gMode == OPMODE_ACTIVE && now - gLastTelemetry >= TELEMETRY_MS) {
-    gLastTelemetry = now;
-    sendTelemetry(now);
-  }
-  updateStatusLeds();
-  renderLcd(now);
-  animateStrip(now);
+  maintainWiFi();
+
+  maintainTcpConnection();
+
+  pollSensors();
+
+  maintainTelemetry();
+
+  updateLeds();
+
+  updateLcd();
+
+  delay(2);
 }

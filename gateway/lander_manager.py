@@ -10,6 +10,7 @@ import asyncio
 from datetime import datetime, timezone
 import json
 import logging
+import math
 import time
 from typing import Any, Optional
 
@@ -75,6 +76,18 @@ class LanderManager:
         self._reader_task: Optional[asyncio.Task] = None
         self._staleness_task: Optional[asyncio.Task] = None
         self._running: bool = False
+
+        # Remote display forwarding state
+        self._latest_rover_display: Optional[dict[str, Any]] = None
+        self._last_rover_data_sent: Optional[dict[str, Any]] = None
+        self._last_rover_online_state: Optional[bool] = None
+        self._last_rover_display_sent_time: float = 0.0
+        self._min_forward_interval_s: float = 0.25
+        self._heartbeat_interval_s: float = 2.5
+        self._latest_drone_display: Optional[dict[str, Any]] = None
+        self._last_drone_data_sent: Optional[dict[str, Any]] = None
+        self._last_drone_online_state: Optional[bool] = None
+        self._last_drone_display_sent_time: float = 0.0
 
     @property
     def is_running(self) -> bool:
@@ -287,13 +300,19 @@ class LanderManager:
                     return
 
         elif msg_type == "command_ack":
-            if not isinstance(payload.get("accepted"), bool):
+            accepted = payload.get("accepted")
+            if accepted is None:
+                accepted = payload.get("ok")
+            if not isinstance(accepted, bool):
                 return
             if "request_id" in payload and payload["request_id"] is not None:
                 req_id = payload["request_id"]
                 if isinstance(req_id, bool) or not isinstance(req_id, int) or req_id < 0:
                     return
-            if "reason" in payload and payload["reason"] is not None and not isinstance(payload["reason"], str):
+            reason = payload.get("reason")
+            if reason is None:
+                reason = payload.get("message")
+            if reason is not None and not isinstance(reason, str):
                 return
 
         else:
@@ -313,7 +332,12 @@ class LanderManager:
             if req_id is not None and req_id in self._pending_commands:
                 fut = self._pending_commands.get(req_id)
                 if fut is not None and not fut.done():
-                    fut.set_result(payload)
+                    normalized_ack = dict(payload)
+                    if "accepted" not in normalized_ack:
+                        normalized_ack["accepted"] = normalized_ack.get("ok", False)
+                    if "reason" not in normalized_ack:
+                        normalized_ack["reason"] = normalized_ack.get("message")
+                    fut.set_result(normalized_ack)
 
         # 2. Status Snapshot (response to GET_STATUS or on-connect status)
         elif msg_type == "status":
@@ -323,6 +347,7 @@ class LanderManager:
                 fut = self._pending_commands.get(req_id)
                 if fut is not None and not fut.done():
                     fut.set_result({"accepted": True, "reason": None})
+            asyncio.create_task(self._sync_display_to_lander())
 
         # 3. Mode Status Update
         elif msg_type == "mode_status":
@@ -522,3 +547,234 @@ class LanderManager:
             dht11_state=dht_state,
             firmware=self._firmware,
         )
+
+    # ------------------------------------------------------------------------
+    # Remote Mission Display Forwarding (Rover & Drone to Lander over TCP)
+    # ------------------------------------------------------------------------
+
+    @staticmethod
+    def _has_meaningful_rover_change(
+        prev: Optional[dict[str, Any]],
+        current: dict[str, Any],
+    ) -> bool:
+        if prev is None:
+            return True
+        if prev.get("cmd") != current.get("cmd"):
+            return True
+        if prev.get("mode") != current.get("mode"):
+            return True
+        p_dist, c_dist = prev.get("distance"), current.get("distance")
+        if p_dist is None or c_dist is None or abs(p_dist - c_dist) >= 0.5:
+            return True
+        p_pitch, c_pitch = prev.get("pitch"), current.get("pitch")
+        if p_pitch is None or c_pitch is None or abs(p_pitch - c_pitch) >= 0.5:
+            return True
+        p_roll, c_roll = prev.get("roll"), current.get("roll")
+        if p_roll is None or c_roll is None or abs(p_roll - c_roll) >= 0.5:
+            return True
+        return False
+
+    async def send_display_message(self, message: dict[str, Any]) -> bool:
+        """Safely transmit a JSON display update line to the connected lander client."""
+        if not self.transport.is_open():
+            return False
+        try:
+            line = json.dumps(message)
+            await self.transport.write_line(line)
+            return True
+        except (ConnectionError, OSError) as e:
+            logger.debug("Failed to write display message to lander TCP stream: %s", e)
+            return False
+        except Exception as e:
+            logger.warning("Unexpected error writing display message to lander: %s", e)
+            return False
+
+    async def _sync_display_to_lander(self) -> None:
+        """Transmit latest known remote display states when lander connects or reconnects."""
+        if not self.transport.is_open():
+            return
+        if self._latest_rover_display is not None:
+            await self.send_display_message(self._latest_rover_display)
+        if self._latest_drone_display is not None:
+            await self.send_display_message(self._latest_drone_display)
+
+    async def forward_rover_telemetry(
+        self,
+        rover_data: Optional[dict[str, Any]],
+        online: bool = True,
+    ) -> bool:
+        """
+        Format and forward rover telemetry to the lander over the TCP stream.
+        Maps DIST -> distance, PITCH -> pitch, ROLL -> roll, CMD -> cmd, MODE -> mode.
+        Rate limits forwarding to avoid flooding the ESP32 while ensuring staleness
+        and heartbeats are delivered.
+        """
+        now = time.monotonic()
+        data_payload: Optional[dict[str, Any]] = None
+
+        if rover_data is not None:
+            dist = rover_data.get("distance")
+            if dist is None:
+                dist = rover_data.get("distance_cm")
+            if dist is None:
+                dist = rover_data.get("DIST")
+
+            pitch = rover_data.get("pitch")
+            if pitch is None:
+                pitch = rover_data.get("pitch_deg")
+            if pitch is None:
+                pitch = rover_data.get("PITCH")
+
+            roll = rover_data.get("roll")
+            if roll is None:
+                roll = rover_data.get("roll_deg")
+            if roll is None:
+                roll = rover_data.get("ROLL")
+
+            cmd = rover_data.get("cmd")
+            if cmd is None:
+                cmd = rover_data.get("command")
+            if cmd is None:
+                cmd = rover_data.get("CMD")
+
+            mode = rover_data.get("mode")
+            if mode is None:
+                mode = rover_data.get("MODE")
+
+            data_payload = {
+                "distance": float(dist) if dist is not None else None,
+                "pitch": float(pitch) if pitch is not None else None,
+                "roll": float(roll) if roll is not None else None,
+                "cmd": str(cmd) if cmd is not None else "",
+                "mode": str(mode) if mode is not None else "",
+            }
+
+        display_payload = {
+            "type": "mission_display",
+            "device": "rover",
+            "connected": online,
+            "data": data_payload,
+        }
+
+        self._latest_rover_display = display_payload
+
+        time_since_last_sent = now - self._last_rover_display_sent_time
+        should_send = False
+
+        if self._last_rover_online_state is not online:
+            # Immediate send on online/offline state transitions
+            should_send = True
+        elif online:
+            # Currently online: send if meaningful change & min interval elapsed,
+            # or if heartbeat interval elapsed
+            if self._has_meaningful_rover_change(self._last_rover_data_sent, data_payload or {}):
+                if time_since_last_sent >= self._min_forward_interval_s:
+                    should_send = True
+            elif time_since_last_sent >= self._heartbeat_interval_s:
+                should_send = True
+
+        if not should_send:
+            return False
+
+        sent = await self.send_display_message(display_payload)
+        if sent:
+            self._last_rover_online_state = online
+            self._last_rover_data_sent = data_payload
+            self._last_rover_display_sent_time = now
+        return sent
+
+    @staticmethod
+    def _has_meaningful_drone_change(
+        prev: Optional[dict[str, Any]],
+        current: dict[str, Any],
+    ) -> bool:
+        if prev is None:
+            return True
+        if prev.get("flight_status") != current.get("flight_status"):
+            return True
+        p_lat, c_lat = prev.get("latitude"), current.get("latitude")
+        if p_lat != c_lat:
+            if p_lat is None or c_lat is None or abs(p_lat - c_lat) >= 0.0001:
+                return True
+        p_lon, c_lon = prev.get("longitude"), current.get("longitude")
+        if p_lon != c_lon:
+            if p_lon is None or c_lon is None or abs(p_lon - c_lon) >= 0.0001:
+                return True
+        return False
+
+    async def forward_drone_telemetry(
+        self,
+        drone_data: Optional[dict[str, Any]],
+        online: bool = True,
+    ) -> bool:
+        """
+        Format and forward drone telemetry to the lander over the TCP stream.
+        Maps flight_status, latitude, longitude into the mission_display contract.
+        Preserves JSON null for unavailable GPS coordinates.
+        Rate-limits to prevent flooding at 2 Hz while ensuring staleness and heartbeats.
+        """
+        now = time.monotonic()
+        data_payload: Optional[dict[str, Any]] = None
+
+        if drone_data is not None:
+            status = drone_data.get("flight_status") or drone_data.get("status") or "STANDBY"
+            gps = drone_data.get("gps") if isinstance(drone_data.get("gps"), dict) else {}
+            raw_lat = gps.get("latitude") if gps.get("latitude") is not None else drone_data.get("latitude")
+            raw_lon = gps.get("longitude") if gps.get("longitude") is not None else drone_data.get("longitude")
+
+            lat_val = None
+            if raw_lat is not None:
+                try:
+                    f_lat = float(raw_lat)
+                    if math.isfinite(f_lat):
+                        lat_val = f_lat
+                except (ValueError, TypeError):
+                    pass
+
+            lon_val = None
+            if raw_lon is not None:
+                try:
+                    f_lon = float(raw_lon)
+                    if math.isfinite(f_lon):
+                        lon_val = f_lon
+                except (ValueError, TypeError):
+                    pass
+
+            data_payload = {
+                "flight_status": str(status),
+                "latitude": lat_val,
+                "longitude": lon_val,
+            }
+
+        display_payload = {
+            "type": "mission_display",
+            "device": "drone",
+            "connected": online,
+            "data": data_payload if online else (data_payload or None),
+        }
+
+        self._latest_drone_display = display_payload
+
+        time_since_last_sent = now - self._last_drone_display_sent_time
+        should_send = False
+
+        if self._last_drone_online_state is not online:
+            # Immediate send on online/offline state transitions
+            should_send = True
+        elif online:
+            # Send if meaningful change and min interval elapsed, or heartbeat elapsed
+            if self._has_meaningful_drone_change(self._last_drone_data_sent, data_payload or {}):
+                if time_since_last_sent >= self._min_forward_interval_s:
+                    should_send = True
+            elif time_since_last_sent >= self._heartbeat_interval_s:
+                should_send = True
+
+        if not should_send:
+            return False
+
+        sent = await self.send_display_message(display_payload)
+        if sent:
+            self._last_drone_online_state = online
+            self._last_drone_data_sent = data_payload
+            self._last_drone_display_sent_time = now
+        return sent

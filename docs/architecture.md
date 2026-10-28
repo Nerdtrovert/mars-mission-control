@@ -3,28 +3,30 @@
 ## Components and ownership
 
 ```text
-Lander ESP32 --private Wi-Fi, TCP/JSON--> Raspberry Pi gateway --HTTP/WebSocket--> Mac backend
-                                               ^                                | SQLite + dashboard
-                                               | UDP 5005                       v
-Rover ESP32 --HC-12 9600--> Windows Tkinter GUI --UDP--> Pi                Browser / exhibition TV
-
-Drone ESP32 --local-network telemetry--> interface not yet specified
+Lander ESP32 --private Wi-Fi, TCP/JSON (5006)--> Raspberry Pi gateway --HTTP/WebSocket (8001)--> Mac backend
+                                                   ^  ^                                           | SQLite + dashboard
+                                    UDP 5005       |  |  UDP 5007                                 v
+Rover ESP32 --HC-12 9600--> Windows GUI ----------+  |                                       Browser / exhibition TV
+Drone ESP32 --local-network UDP 5007 ----------------+
 ```
 
-- **Lander ESP32** owns BMP280, DHT11, display, status LEDs, and operating mode.
+- **Lander ESP32** owns BMP280, DHT11, 20x4 LCD, status LEDs, and operating mode.
   It initiates a persistent newline-delimited JSON TCP connection to the Pi on
   the private local Wi-Fi network. USB serial remains for programming/debugging
-  only. Status query and ACTIVE/STANDBY commands use the Wi-Fi stream. The
-  retired ramp, servo, actuator, and limit-switch hardware are absent.
-- **Raspberry Pi 4** owns the lander TCP listener and an independent UDP
-  receiver for rover GUI telemetry on port 5005. Both are started and stopped
-  with the gateway FastAPI lifecycle. Gateway process health is separate from
-  device connectivity, which requires recent valid telemetry.
+  only. Status query and ACTIVE/STANDBY commands use the Wi-Fi stream. The LCD
+  rotates through 5 non-blocking pages: Lander status (2.5s), Lander sensors (2.5s),
+  Rover (5s), Drone (5s), and Mars fun fact (5s).
+- **Raspberry Pi 4** owns the lander TCP listener (port 5006), an independent UDP
+  receiver for rover GUI telemetry (port 5005), and a drone UDP receiver (port 5007).
+  The gateway forwards live rover and drone display messages to the connected lander
+  over TCP. All receivers are managed within the gateway FastAPI lifespan.
+  Gateway process health is separate from device connectivity.
 - **MacBook backend** owns mission state, SQLite persistence, command auditing,
   API, and dashboard WebSocket/polling. In network mode it obtains lander and
   rover telemetry from the Pi; it never opens device serial ports.
-- **Dashboard** shows separate lander and rover status. A reported rover
-  command does not prove physical movement.
+- **Dashboard** shows separate lander, rover, and drone status. A reported rover
+  command does not prove physical movement. Drone telemetry is display-only;
+  no commands are dispatched to the drone.
 
 ## Lander path
 
@@ -93,7 +95,14 @@ battery, speed, or encoder values are part of the rover schema.
 
 ## Drone interface status
 
-No drone transport, telemetry schema, implementation, or simulator exists in
-the repository. The drone team must define identity, fields and units,
-framing/transport, update cadence, sender validation, health and stale timeout
-semantics, and whether commands are in scope before implementation.
+Drone telemetry is implemented and integrated:
+
+- **Transport**: UDP on port 5007 to the Raspberry Pi gateway (`gateway/drone_udp.py`).
+- **Schema**: Authoritative JSON datagram with device_id, sequence, timestamp_ms, flight_status, orientation (roll/pitch/yaw), environment (temperature_c, pressure_hpa, humidity_pct), gps (latitude, longitude, altitude_m), battery (voltage_v, percentage).
+- **Validation**: Full field validation with numeric range checking (`gateway/drone_udp.py:parse_drone_datagram`).
+- **Staleness**: `DRONE_OFFLINE_TIMEOUT_S` (default 10s) determines ONLINE/OFFLINE state; staleness monitor runs at half the timeout interval.
+- **Forwarding**: Compact display state (flight_status, latitude, longitude) forwarded to lander LCD via `mission_display` TCP message (`gateway/lander_manager.py`).
+- **Simulator**: Deterministic simulator in `backend/app/communication/drone_runner.py` with phases (STANDBY, TAKEOFF, CRUISING, HOVERING, LANDING).
+- **Backend API**: `GET /api/drone/status` and WebSocket `drone_telemetry` messages.
+- **Frontend**: Dedicated drone telemetry card in dashboard.
+- **No commands**: Drone is telemetry-only; no command dispatch from Mission Control.

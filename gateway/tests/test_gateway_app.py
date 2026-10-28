@@ -39,19 +39,24 @@ async def test_gateway_app_lifespan_starts_and_stops_cleanly():
         lander_tcp_port=0,
         rover_udp_host="127.0.0.1",
         rover_udp_port=0,
+        drone_udp_host="127.0.0.1",
+        drone_udp_port=0,
     )
     transport = LanderTCPTransport(config.lander_tcp_host, config.lander_tcp_port)
     app = create_gateway_app(config=config, transport=transport)
 
     assert app.state.lander_manager is not None
     assert app.state.rover_receiver is not None
+    assert app.state.drone_receiver is not None
 
     async with app.router.lifespan_context(app):
         assert app.state.lander_manager.is_running is True
         assert app.state.rover_receiver._transport is not None
+        assert app.state.drone_receiver._transport is not None
 
     assert app.state.lander_manager.is_running is False
     assert app.state.rover_receiver._transport is None
+    assert app.state.drone_receiver._transport is None
 
 
 @pytest.mark.anyio

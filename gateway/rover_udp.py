@@ -59,9 +59,15 @@ def parse_rover_datagram(data: bytes) -> dict[str, Any]:
 class RoverUDPProtocol(asyncio.DatagramProtocol):
     """Validates packets and retains only the latest valid rover sample."""
 
-    def __init__(self, config: GatewayConfig, broadcaster: Any) -> None:
+    def __init__(
+        self,
+        config: GatewayConfig,
+        broadcaster: Any,
+        lander_manager: Optional[Any] = None,
+    ) -> None:
         self.config = config
         self.broadcaster = broadcaster
+        self.lander_manager = lander_manager
         self.transport: Optional[asyncio.DatagramTransport] = None
         self._data: dict[str, Any] = {}
         self._last_seen_mono: Optional[float] = None
@@ -84,7 +90,12 @@ class RoverUDPProtocol(asyncio.DatagramProtocol):
         self._last_seen = datetime.now(timezone.utc).isoformat()
         self._last_online = True
         try:
-            asyncio.get_running_loop().create_task(self._broadcast_status())
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._broadcast_status())
+            if self.lander_manager is not None:
+                loop.create_task(
+                    self.lander_manager.forward_rover_telemetry(parsed, online=True)
+                )
         except RuntimeError:
             # Direct protocol tests may exercise datagram validation synchronously.
             pass
@@ -128,13 +139,20 @@ class RoverUDPProtocol(asyncio.DatagramProtocol):
             if self._last_online is not online:
                 self._last_online = online
                 await self.broadcaster.broadcast({"type": "rover_telemetry", "rover": status})
+                if self.lander_manager is not None:
+                    await self.lander_manager.forward_rover_telemetry(self._data, online=online)
 
 
 class RoverUDPReceiver:
     """Lifecycle wrapper for a UDP transport independent of the serial manager."""
 
-    def __init__(self, config: GatewayConfig, broadcaster: Any) -> None:
-        self.protocol = RoverUDPProtocol(config, broadcaster)
+    def __init__(
+        self,
+        config: GatewayConfig,
+        broadcaster: Any,
+        lander_manager: Optional[Any] = None,
+    ) -> None:
+        self.protocol = RoverUDPProtocol(config, broadcaster, lander_manager=lander_manager)
         self._transport: Optional[asyncio.DatagramTransport] = None
         self._monitor_task: Optional[asyncio.Task[None]] = None
 

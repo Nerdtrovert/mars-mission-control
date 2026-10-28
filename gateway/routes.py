@@ -18,6 +18,7 @@ from app.communication.rover_model import RoverSource, RoverStatus
 
 if TYPE_CHECKING:
     from gateway.rover_udp import RoverUDPReceiver
+    from gateway.drone_udp import DroneUDPReceiver
     from gateway.lander_manager import LanderManager
     from gateway.ws_manager import WebSocketBroadcaster
 
@@ -28,8 +29,9 @@ def create_gateway_router(
     lander_manager: LanderManager,
     ws_broadcaster: WebSocketBroadcaster,
     rover_receiver: Optional["RoverUDPReceiver"] = None,
+    drone_receiver: Optional["DroneUDPReceiver"] = None,
 ) -> APIRouter:
-    """Creates FastAPI router configured with the lander manager and broadcaster."""
+    """Creates FastAPI router configured with the lander manager, broadcaster, rover, and drone receivers."""
     router = APIRouter()
 
     @router.get("/health", response_model=GatewayHealthResponse)
@@ -49,6 +51,27 @@ def create_gateway_router(
         if rover_receiver is None:
             return RoverStatus(source=RoverSource.NETWORK).model_dump(mode="json")
         return rover_receiver.protocol.status()
+
+    @router.get("/api/drone/status")
+    async def get_drone_status():
+        if drone_receiver is None:
+            return {
+                "drone_id": "mars-drone-01",
+                "flight_status": None,
+                "latitude": None,
+                "longitude": None,
+                "connection_state": "OFFLINE",
+                "last_seen": None,
+                "source": "network",
+            }
+        return drone_receiver.protocol.status()
+
+    @router.post("/api/drone/display")
+    async def post_drone_display(payload: dict):
+        connected = bool(payload.get("connected", True))
+        data = payload.get("data")
+        sent = await lander_manager.forward_drone_telemetry(data, online=connected)
+        return {"sent": sent}
 
     @router.post("/api/commands", response_model=CommandResponse)
     async def post_command(command: CommandRequest):

@@ -86,6 +86,7 @@
   const elWsBadge = document.getElementById('ws-status-badge');
   const elGwBadge = document.getElementById('gw-status-badge');
   const elDevBadge = document.getElementById('device-status-badge');
+  const elDroneBadge = document.getElementById('drone-status-badge');
   const elModeBadge = document.getElementById('mode-badge');
   const elOfflineBanner = document.getElementById('offline-banner');
 
@@ -128,6 +129,19 @@
     event: document.getElementById('rover-event')
   };
 
+  const droneElements = {
+    connection: document.getElementById('drone-connection'),
+    source: document.getElementById('drone-source'),
+    lastSeen: document.getElementById('drone-last-seen'),
+    flightStatus: document.getElementById('drone-flight-status'),
+    altitude: document.getElementById('drone-altitude'),
+    gps: document.getElementById('drone-gps'),
+    battery: document.getElementById('drone-battery'),
+    orientation: document.getElementById('drone-orientation'),
+    environment: document.getElementById('drone-environment'),
+    event: document.getElementById('drone-event')
+  };
+
   function renderRoverStatus(rover) {
     if (!rover || rover.rover_id !== 'mars-rover-01') return;
     const online = rover.connection_state === 'ONLINE';
@@ -144,6 +158,52 @@
     roverElements.command.textContent = rover.command || '--';
     roverElements.mode.textContent = rover.mode === 'M' ? 'MANUAL' : rover.mode === 'A' ? 'AUTONOMOUS' : '--';
     roverElements.event.textContent = rover.event || (rover.obstacle_detected ? 'Obstacle detected' : 'No active rover event.');
+  }
+
+  function renderDroneStatus(drone) {
+    if (!drone || drone.drone_id !== 'esp32-drone') return;
+    const online = drone.connection_state === 'ONLINE';
+    droneElements.connection.textContent = online ? 'ONLINE' : 'OFFLINE';
+    droneElements.connection.className = 'drone-connection ' + (online ? 'online' : 'offline');
+    droneElements.source.textContent = drone.source === 'simulator' ? 'SIMULATED DATA' : 'NETWORK / HARDWARE';
+    droneElements.lastSeen.textContent = drone.last_seen
+      ? `LAST VALID PACKET ${formatTimeIST(drone.last_seen)} IST${online ? '' : ' • STALE'}`
+      : 'NO VALID PACKETS';
+    droneElements.flightStatus.textContent = drone.flight_status || '--';
+    droneElements.altitude.textContent = drone.altitude_m == null ? '--' : Number(drone.altitude_m).toFixed(1);
+    droneElements.gps.textContent = drone.latitude == null || drone.longitude == null
+      ? '-- / --'
+      : `${Number(drone.latitude).toFixed(6)} / ${Number(drone.longitude).toFixed(6)}`;
+    droneElements.battery.textContent = drone.battery_percentage == null ? '--' : Number(drone.battery_percentage).toFixed(1);
+
+    // Render orientation if available in telemetry
+    if (drone.telemetry && drone.telemetry.orientation) {
+      const o = drone.telemetry.orientation;
+      droneElements.orientation.textContent =
+        (o.roll == null ? '--' : Number(o.roll).toFixed(1)) + ' / ' +
+        (o.pitch == null ? '--' : Number(o.pitch).toFixed(1)) + ' / ' +
+        (o.yaw == null ? '--' : Number(o.yaw).toFixed(1));
+    } else {
+      droneElements.orientation.textContent = '-- / -- / --';
+    }
+
+    // Render environment if available in telemetry
+    if (drone.telemetry && drone.telemetry.environment) {
+      const e = drone.telemetry.environment;
+      droneElements.environment.textContent =
+        (e.temperature_c == null ? '--' : Number(e.temperature_c).toFixed(1)) + '°C / ' +
+        (e.pressure_hpa == null ? '--' : Number(e.pressure_hpa).toFixed(1)) + 'hPa / ' +
+        (e.humidity_pct == null ? '--' : Number(e.humidity_pct).toFixed(1)) + '%';
+    } else {
+      droneElements.environment.textContent = '--°C / --hPa / --%';
+    }
+
+    droneElements.event.textContent = drone.telemetry ? 'Receiving drone telemetry.' : 'Waiting for drone telemetry.';
+
+    // Update header badge
+    if (elDroneBadge) {
+      setConnectionBadge(elDroneBadge, 'DRONE', drone.connection_state);
+    }
   }
 
   // --- Indian Standard Time (IST, UTC+05:30) Timezone Formatters ---
@@ -590,12 +650,13 @@
   // --- API Fetch Polling Fallback ---
   async function pollMissionData() {
     try {
-      const [resState, resCmds, resEvents, resTelem, resRover] = await Promise.all([
+      const [resState, resCmds, resEvents, resTelem, resRover, resDrone] = await Promise.all([
         fetch('/api/mission/state'),
         fetch('/api/mission/commands'),
         fetch('/api/mission/events'),
         fetch('/api/mission/telemetry/history'),
-        fetch('/api/rover/status')
+        fetch('/api/rover/status'),
+        fetch('/api/drone/status')
       ]);
 
       if (resState.ok) {
@@ -616,6 +677,7 @@
         renderTelemetryHistory(telemetryHistory);
       }
       if (resRover.ok) renderRoverStatus(await resRover.json());
+      if (resDrone.ok) renderDroneStatus(await resDrone.json());
 
       // Successful poll clears any stale connection disruption warning
       elOfflineBanner.classList.add('hidden');
@@ -686,6 +748,8 @@
           }
         } else if (msg.type === 'rover_telemetry') {
           renderRoverStatus(msg.rover);
+        } else if (msg.type === 'drone_telemetry') {
+          renderDroneStatus(msg.drone);
         } else if (msg.type === 'command_update') {
           pollMissionData();
         } else if (msg.type === 'event') {

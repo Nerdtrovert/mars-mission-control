@@ -39,6 +39,7 @@ class NetworkGatewayRunner:
         reconnect_max_delay_s: float = 10.0,
         reconnect_backoff_factor: float = 1.5,
         storage: Optional[SQLiteStorage] = None,
+        broadcaster: Optional[Any] = None,
     ) -> None:
         self.gateway_client = gateway_client
         self.state_manager = state_manager
@@ -51,6 +52,7 @@ class NetworkGatewayRunner:
         self.reconnect_max_delay_s = reconnect_max_delay_s
         self.reconnect_backoff_factor = reconnect_backoff_factor
         self.storage = storage
+        self.broadcaster = broadcaster
 
         self._ws_task: Optional[asyncio.Task] = None
         self._health_task: Optional[asyncio.Task] = None
@@ -130,6 +132,8 @@ class NetworkGatewayRunner:
                             msg_type = payload.get("type")
                             if msg_type == "telemetry":
                                 self.gateway_client.ingest_telemetry_line(msg_text, timestamp=now_iso)
+                            elif msg_type in ("rover_telemetry", "drone_telemetry") and self.broadcaster is not None:
+                                self.broadcaster.broadcast_sync(payload)
                         except Exception as e:
                             logger.error(f"Error processing gateway WS message: {e}")
 

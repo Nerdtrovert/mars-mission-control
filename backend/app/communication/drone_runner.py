@@ -1,0 +1,160 @@
+"""Drone telemetry runner for Mission Control backend."""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timezone
+import json
+import logging
+import math
+import time
+from typing import Any, Callable, Optional
+import urllib.error
+import urllib.request
+
+from app.communication.drone_model import (
+    DroneBattery,
+    DroneConnectionState,
+    DroneEnvironment,
+    DroneGPS,
+    DroneOrientation,
+    DroneSource,
+    DroneStatus,
+    DroneTelemetry,
+    offline_drone_status,
+)
+
+logger = logging.getLogger("mars.drone_runner")
+
+
+class DroneRunner:
+    """Publishes drone snapshots from the Pi HTTP status endpoint or simulator mode."""
+
+    def __init__(
+        self,
+        mode: str,
+        http_url: str,
+        publish: Callable[[DroneStatus], None],
+        interval_s: float = 0.5,
+    ) -> None:
+        self.mode = mode
+        self.http_url = http_url.rstrip("/")
+        self.publish = publish
+        self.interval_s = interval_s
+        self._task: Optional[asyncio.Task[None]] = None
+        self._stop_event = asyncio.Event()
+        self.is_running = False
+        self._sim_tick = 0
+        if mode == "simulator":
+            self._last_status: DroneStatus = self.step_simulator()
+        else:
+            self._last_status = offline_drone_status(DroneSource.NETWORK)
+
+    def step_simulator(self) -> DroneStatus:
+        """Advance deterministic simulated drone scenario."""
+        self._sim_tick += 1
+        phases = ["STANDBY", "TAKEOFF", "CRUISING", "HOVERING", "LANDING"]
+        phase = phases[(self._sim_tick // 15) % len(phases)]
+        lat = 12.9716 + 0.0001 * math.sin(self._sim_tick / 5.0)
+        lon = 77.5946 + 0.0001 * math.cos(self._sim_tick / 5.0)
+        alt = max(0.0, 50.0 + 10.0 * math.sin(self._sim_tick / 10.0)) if phase != "STANDBY" else 0.0
+        batt = max(10.0, 100.0 - (self._sim_tick * 0.1) % 90.0)
+
+        telem = DroneTelemetry(
+            device_id="esp32-drone",
+            sequence=self._sim_tick,
+            timestamp_ms=int(time.time() * 1000),
+            flight_status=phase,
+            orientation=DroneOrientation(
+                roll=round(1.5 * math.sin(self._sim_tick / 3.0), 1),
+                pitch=round(1.2 * math.cos(self._sim_tick / 4.0), 1),
+                yaw=round((self._sim_tick * 5.0) % 360.0, 1),
+            ),
+            environment=DroneEnvironment(
+                temperature_c=22.5,
+                pressure_hpa=1013.2,
+                humidity_pct=48.0,
+            ),
+            gps=DroneGPS(
+                latitude=round(lat, 6),
+                longitude=round(lon, 6),
+                altitude_m=round(alt, 1),
+            ),
+            battery=DroneBattery(
+                voltage_v=round(11.1 + (batt / 100.0) * 1.5, 2),
+                percentage=round(batt, 1),
+            ),
+        )
+        status = DroneStatus(
+            drone_id="esp32-drone",
+            flight_status=phase,
+            latitude=round(lat, 6),
+            longitude=round(lon, 6),
+            altitude_m=round(alt, 1),
+            battery_percentage=round(batt, 1),
+            connection_state=DroneConnectionState.ONLINE,
+            last_seen=datetime.now(timezone.utc).isoformat(),
+            source=DroneSource.SIMULATOR,
+            telemetry=telem,
+        )
+        self._last_status = status
+        return status
+
+    def snapshot(self) -> DroneStatus:
+        return self._last_status.model_copy(deep=True)
+
+    def update_from_payload(self, payload: dict[str, Any]) -> None:
+        """Update runner status from a live payload (e.g. from WebSocket)."""
+        try:
+            status = DroneStatus.model_validate(payload)
+            self._last_status = status
+            self.publish(status)
+        except Exception as exc:
+            logger.debug("Failed to validate drone status payload: %s", exc)
+
+    async def start(self) -> None:
+        if self._task is not None and not self._task.done():
+            return
+        self._stop_event.clear()
+        self.is_running = True
+        self._task = asyncio.create_task(self._run(), name="drone_runner")
+        await asyncio.sleep(0)
+
+    async def stop(self) -> None:
+        self._stop_event.set()
+        if self._task is not None:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+        self.is_running = False
+
+    async def _run(self) -> None:
+        while not self._stop_event.is_set():
+            if self.mode in ("network", "real"):
+                status = await asyncio.to_thread(self._fetch_network_status)
+                self._last_status = status
+                self.publish(status)
+            elif self.mode == "simulator":
+                status = self.step_simulator()
+                self.publish(status)
+            await asyncio.sleep(self.interval_s)
+
+    def _fetch_network_status(self) -> DroneStatus:
+        url = f"{self.http_url}/api/drone/status"
+        try:
+            raw = self._fetch(url)
+            payload = json.loads(raw)
+            status = DroneStatus.model_validate(payload)
+            if status.source != DroneSource.NETWORK:
+                status = status.model_copy(update={"source": DroneSource.NETWORK})
+            return status
+        except Exception:
+            return offline_drone_status(DroneSource.NETWORK)
+
+    def _fetch(self, url: str) -> bytes:
+        req = urllib.request.Request(url, headers={"User-Agent": "MarsMissionControl/1.0", "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=1.0) as response:
+            return response.read()
