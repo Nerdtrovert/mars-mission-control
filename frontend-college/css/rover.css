@@ -46,6 +46,43 @@
 }
 
 /* --- Card 1: Tactical Mars Terrain Map --- */
+.rover-map-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.25rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.rover-map-title {
+  font-size: 1.12rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffffff;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.rover-map-title .sector-code {
+  white-space: nowrap;
+  color: var(--slate-300);
+}
+
+.rover-map-tag {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--amber-400);
+  text-align: right;
+  line-height: 1.35;
+  white-space: normal;
+  max-width: 250px;
+}
+
 .terrain-map-container {
   position: relative;
   width: 100%;
@@ -273,5 +310,17 @@
 @media (max-width: 600px) {
   .rover-telemetry-grid {
     grid-template-columns: 1fr;
+  }
+  .rover-map-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  .rover-map-title {
+    white-space: normal;
+  }
+  .rover-map-tag {
+    text-align: left;
+    max-width: 100%;
   }
 }
