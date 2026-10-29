@@ -70,12 +70,12 @@
   min-height: 210px;
   padding: 2.2rem 1.5rem 1.8rem 1.5rem;
   
-  /* Fully translucent glass styling */
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  /* Translucent frosted glass styling (semi-opaque) */
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.32);
   border-radius: 16px;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   
   /* Layout */
   display: flex;
@@ -85,14 +85,14 @@
   text-decoration: none;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   user-select: none;
 }
 
 .translucent-card:hover {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.7);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4), 0 0 24px rgba(255, 255, 255, 0.18);
+  background: rgba(22, 33, 62, 0.62);
+  border-color: rgba(255, 255, 255, 0.65);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 255, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.28);
   transform: translateY(-4px);
 }
 
