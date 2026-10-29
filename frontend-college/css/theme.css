@@ -88,7 +88,7 @@ html, body {
 /* --- Shared Navbar Status Pills --- */
 .status-pill {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   padding: 0.45rem 0.85rem;
@@ -131,7 +131,7 @@ html, body {
   justify-content: space-between;
   align-items: center;
   font-family: var(--font-mono);
-  font-size: 0.74rem;
+  font-size: 0.84rem;
   color: var(--slate-400);
   letter-spacing: 0.06em;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);

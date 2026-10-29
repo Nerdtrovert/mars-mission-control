@@ -73,7 +73,7 @@
   top: 12px;
   left: 12px;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   padding: 0.35rem 0.65rem;
@@ -94,7 +94,7 @@
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-md);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: var(--slate-300);
 }
 
@@ -151,7 +151,7 @@
   bottom: 8px;
   right: 12px;
   font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-size: 0.76rem;
   color: var(--slate-400);
   letter-spacing: 0.08em;
 }
@@ -172,13 +172,13 @@
   justify-content: space-between;
   align-items: center;
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: #ffffff;
 }
 
 .radar-status-pill {
-  font-size: 0.68rem;
+  font-size: 0.78rem;
   padding: 0.2rem 0.55rem;
   border-radius: var(--radius-sm);
   background: rgba(251, 191, 36, 0.12);
@@ -204,7 +204,7 @@
 
 .radar-alert-note {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--slate-400);
   line-height: 1.45;
 }
@@ -225,7 +225,7 @@
   padding-top: 1rem;
   border-top: 1px solid var(--border-subtle);
   font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-size: 0.84rem;
   color: var(--slate-400);
   line-height: 1.5;
 }
