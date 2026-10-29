@@ -66,9 +66,9 @@ static constexpr uint32_t TCP_RETRY_MS = 1000;
 
 static constexpr uint32_t REMOTE_TIMEOUT_MS = 10000;
 
-static constexpr uint32_t LCD_LANDER_MS = 2500;
-static constexpr uint32_t LCD_REMOTE_MS = 5000;
-static constexpr uint32_t LCD_FACT_MS = 5000;
+static constexpr uint32_t LCD_LANDER_MS = 3200;
+static constexpr uint32_t LCD_REMOTE_MS = 3750;
+static constexpr uint32_t LCD_FACT_MS = 3750;
 
 static constexpr size_t TCP_BUFFER_SIZE = 768;
 

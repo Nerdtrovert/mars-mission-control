@@ -122,7 +122,7 @@ ACTIVE MODE (Default at boot):
     Page 1: BMP280 Temperature (°C) and Pressure (hPa)
     Page 2: DHT11 Temperature (°C) and Humidity (%)
     Page 3: Mission Link Status (Lander ACTIVE / Rover status note / Drone note)
-
+   
 STANDBY MODE (Commanded via SET_STANDBY):
 - Green Status LED: OFF (LOW).
 - Red Status LED: OFF (LOW) (fault indicator suppressed in standby).
