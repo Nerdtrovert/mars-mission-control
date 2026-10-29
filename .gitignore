@@ -22,7 +22,6 @@ Lander/lander/lander_config.h
 *-wal
 *-shm
 *-journal
-data/
 backend/data/
 logs/
 *.log
