@@ -1,0 +1,283 @@
+/**
+ * Mars Mission Control — Cinematic Mars Landing Screen
+ * frontend-college/css/landing.css
+ * 
+ * Redesigned to match user's Image 2 reference design:
+ * - Image 1 background (Mars terrain photograph, full-bleed cover).
+ * - Exactly three horizontally centered, fully translucent glass-style cards.
+ * - Thin, subtle white border.
+ * - Mars background clearly visible THROUGH the cards.
+ * - Minimal, elegant, uncluttered.
+ */
+
+.landing-viewport {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+  background-color: #070302;
+}
+
+/* --- Mars Surface Background (Image 1) --- */
+.mars-bg-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url('../assets/mars-surface.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Very subtle overlay to ensure readability while keeping Mars landscape clearly visible */
+.mars-bg-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* --- Centered Landing View Panel --- */
+#landing-view {
+  position: relative;
+  z-index: 10;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+}
+
+/* Container for the 3 Translucent Cards (Centered Horizontally) */
+.translucent-nav-grid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+/* The Translucent Glass Card (Matches Image 2) */
+.translucent-card {
+  position: relative;
+  flex: 1 1 240px;
+  max-width: 260px;
+  min-height: 210px;
+  padding: 2.2rem 1.5rem 1.8rem 1.5rem;
+  
+  /* Fully translucent glass styling */
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 16px;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  
+  /* Layout */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  user-select: none;
+}
+
+.translucent-card:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4), 0 0 24px rgba(255, 255, 255, 0.18);
+  transform: translateY(-4px);
+}
+
+.translucent-card:active {
+  transform: translateY(0);
+}
+
+/* Card Line Icon */
+.card-icon-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  margin-bottom: 1.25rem;
+  transition: transform 0.3s ease;
+}
+
+.card-line-icon {
+  width: 58px;
+  height: 58px;
+  stroke: #ffffff;
+}
+
+.translucent-card:hover .card-icon-area {
+  transform: scale(1.05);
+}
+
+/* Card Label */
+.card-label {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-align: center;
+  margin-bottom: 1rem;
+  white-space: nowrap;
+}
+
+/* Arrow */
+.card-arrow-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  opacity: 0.85;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.card-arrow-icon {
+  width: 22px;
+  height: 22px;
+  stroke: #ffffff;
+}
+
+.translucent-card:hover .card-arrow-wrap {
+  opacity: 1;
+  transform: translateX(4px);
+}
+
+/* --- Interactive Subsystem Preview Modal --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+
+.modal-overlay.hidden {
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal-box {
+  width: 90%;
+  max-width: 520px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  padding: 2.25rem;
+  position: relative;
+  animation: modalPop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPop {
+  0% { transform: scale(0.92); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.modal-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #ffffff;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--slate-400);
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0.25rem;
+  transition: color 0.2s;
+}
+
+.modal-close:hover {
+  color: #ffffff;
+}
+
+.modal-body {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--slate-300);
+  margin-bottom: 1.75rem;
+}
+
+.modal-notice {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 0.85rem 1rem;
+  background: rgba(251, 191, 36, 0.1);
+  border-left: 3px solid var(--amber-400);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--amber-400);
+  margin-top: 1rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.modal-btn {
+  padding: 0.75rem 1.4rem;
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.modal-btn-primary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.modal-btn-primary:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.2);
+}
+
+/* --- Responsive Adjustments --- */
+@media (max-width: 840px) {
+  .translucent-nav-grid {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .translucent-card {
+    width: 100%;
+    max-width: 320px;
+    min-height: 180px;
+  }
+}
