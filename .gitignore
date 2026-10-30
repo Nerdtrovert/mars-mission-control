@@ -13,6 +13,8 @@ Lander/lander/lander_config.h
 !.env.example
 !*.env.example
 !.env*.example
+!.env.hybrid
+!.env.network
 
 # Runtime databases and logs
 *.db
@@ -23,6 +25,7 @@ Lander/lander/lander_config.h
 *-shm
 *-journal
 backend/data/
+data/
 logs/
 *.log
 
@@ -45,3 +48,6 @@ temp/
 .pytest_cache/
 .coverage
 htmlcov/
+
+
+!mission_control.db

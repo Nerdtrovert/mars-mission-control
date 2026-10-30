@@ -52,11 +52,16 @@ class RoverSimulator:
             command = (RoverCommand.FORWARD, RoverCommand.LEFT, RoverCommand.FORWARD, RoverCommand.RIGHT)[segment]
             event = None
         mode = RoverMode.MANUAL if (self.tick // 40) % 2 == 0 else RoverMode.AUTONOMOUS
-        distance = max(0.0, 145.0 - self.tick * 0.35)
+        # Cycle distance smoothly so it never gets permanently stuck at 0.0
+        distance = max(12.0, 145.0 - (self.tick % 360) * 0.35)
+        # Dynamic terrain angles oscillating up to ~27°
+        pitch = round(18.5 * math.sin(self.tick / 6.0) + 8.5 * math.cos(self.tick / 14.0), 1)
+        roll = round(14.0 * math.cos(self.tick / 8.0) - 10.0 * math.sin(self.tick / 18.0), 1)
+
         self._status = RoverStatus(
             distance_cm=round(distance, 1),
-            pitch_deg=round(3.2 * math.sin(self.tick / 8), 1),
-            roll_deg=round(2.4 * math.cos(self.tick / 11), 1),
+            pitch_deg=pitch,
+            roll_deg=roll,
             command=command,
             mode=mode,
             connection_state=RoverConnectionState.ONLINE,

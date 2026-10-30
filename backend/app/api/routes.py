@@ -79,8 +79,8 @@ command_tracker = CommandTracker(storage=storage)
 command_tracker.load_history_from_storage()
 
 # Gateway Mode Selection: "simulator" (default) or "network" ("real")
-GATEWAY_MODE = os.getenv("GATEWAY_MODE", "simulator").lower()
-GATEWAY_HTTP_URL = os.getenv("GATEWAY_HTTP_URL", "http://127.0.0.1:8001")
+GATEWAY_MODE = (os.getenv("GATEWAY_MODE") or "simulator").strip().rstrip("\\").strip().lower()
+GATEWAY_HTTP_URL = (os.getenv("GATEWAY_HTTP_URL") or "http://127.0.0.1:8001").strip().rstrip("\\").strip()
 
 
 def _derive_ws_url(http_url: str) -> str:
@@ -93,7 +93,7 @@ def _derive_ws_url(http_url: str) -> str:
 
 
 GATEWAY_WS_URL = os.getenv("GATEWAY_WS_URL") or _derive_ws_url(GATEWAY_HTTP_URL)
-ROVER_MODE = os.getenv("ROVER_MODE", "simulator").strip().lower()
+ROVER_MODE = (os.getenv("ROVER_MODE") or "simulator").strip().rstrip("\\").strip().lower()
 if ROVER_MODE not in ("simulator", "network"):
     raise ValueError("ROVER_MODE must be 'simulator' or 'network'")
 
@@ -154,7 +154,7 @@ rover_runner = RoverRunner(
     publish=_publish_rover_status,
 )
 
-DRONE_MODE = os.getenv("DRONE_MODE", "simulator").strip().lower()
+DRONE_MODE = (os.getenv("DRONE_MODE") or "simulator").strip().rstrip("\\").strip().lower()
 if DRONE_MODE not in ("simulator", "network"):
     raise ValueError("DRONE_MODE must be 'simulator' or 'network'")
 

@@ -155,6 +155,38 @@ class RoverUDPReceiver:
         self.protocol = RoverUDPProtocol(config, broadcaster, lander_manager=lander_manager)
         self._transport: Optional[asyncio.DatagramTransport] = None
         self._monitor_task: Optional[asyncio.Task[None]] = None
+        self._simulator_task: Optional[asyncio.Task[None]] = None
+
+    async def _simulator_loop(self) -> None:
+        """Simulate rover telemetry when rover_simulator is configured and no external packets arrive."""
+        tick = 0
+        while True:
+            await asyncio.sleep(0.5)
+            # Skip if external packet arrived recently
+            if self.protocol._last_seen_mono and (
+                time.monotonic() - self.protocol._last_seen_mono < self.protocol.config.rover_offline_timeout_s
+            ):
+                continue
+            tick += 1
+            dist = max(10.0, round(120.0 - (tick * 0.5) % 100, 1))
+            pitch = round(2.5 * math.sin(tick / 6.0), 1)
+            roll = round(1.8 * math.cos(tick / 8.0), 1)
+            cmd = "F" if (tick // 10) % 2 == 0 else "S"
+            mode = "M" if (tick // 20) % 2 == 0 else "A"
+            parsed = {
+                "distance_cm": dist,
+                "pitch_deg": pitch,
+                "roll_deg": roll,
+                "command": cmd,
+                "mode": mode,
+            }
+            self.protocol._data = parsed
+            self.protocol._last_seen_mono = time.monotonic()
+            self.protocol._last_seen = datetime.now(timezone.utc).isoformat()
+            self.protocol._last_online = True
+            await self.protocol._broadcast_status()
+            if self.protocol.lander_manager is not None:
+                await self.protocol.lander_manager.forward_rover_telemetry(parsed, online=True)
 
     async def start(self) -> None:
         loop = asyncio.get_running_loop()
@@ -164,15 +196,19 @@ class RoverUDPReceiver:
         )
         self._transport = transport  # type: ignore[assignment]
         self._monitor_task = asyncio.create_task(self.protocol.monitor_staleness(), name="rover_udp_staleness")
+        if self.protocol.config.rover_simulator:
+            self._simulator_task = asyncio.create_task(self._simulator_loop(), name="rover_udp_simulator")
 
     async def stop(self) -> None:
-        if self._monitor_task is not None:
-            self._monitor_task.cancel()
-            try:
-                await self._monitor_task
-            except asyncio.CancelledError:
-                pass
-            self._monitor_task = None
+        for task_attr in ("_monitor_task", "_simulator_task"):
+            task = getattr(self, task_attr, None)
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                setattr(self, task_attr, None)
         if self._transport is not None:
             self._transport.close()
             self._transport = None

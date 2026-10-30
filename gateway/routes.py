@@ -66,6 +66,13 @@ def create_gateway_router(
             }
         return drone_receiver.protocol.status()
 
+    @router.post("/api/rover/display")
+    async def post_rover_display(payload: dict):
+        connected = bool(payload.get("connected", True))
+        data = payload.get("data")
+        sent = await lander_manager.forward_rover_telemetry(data, online=connected)
+        return {"sent": sent}
+
     @router.post("/api/drone/display")
     async def post_drone_display(payload: dict):
         connected = bool(payload.get("connected", True))

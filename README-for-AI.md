@@ -31,3 +31,37 @@ UDP listener runs only on the Pi; network-mode Mac backend reads the Pi's
 schema are unresolved.
 
 See [README.md](README.md) for startup commands and docs for API/serial details.
+
+
+  with a single command:
+  ──────
+  ### How to Run the Two Modes
+
+  #### 🚀 Mode 1: Hybrid Exhibition Mode (Recommended Right Now)
+
+  • What it does: Connects to the real Raspberry Pi gateway & physical Lander ESP32, while running live simulated Rover &
+  Drone data.
+  • Why: The physical Lander ESP32's LCD display will show real environmental sensors on Page 1 & 2, and live active Rover &
+  Drone simulation pages on Page 3 & 4. Your web dashboard displays live gauges for all three without any empty stats.
+    ./run_backend.sh hybrid
+    # or
+    python run.py hybrid
+
+  #### 🌐 Mode 2: Full Hardware Network Mode
+
+  • What it does: Listens purely for real physical hardware packets across all three subsystems (Lander on TCP 5006, Rover on
+  UDP 5005, Drone on UDP 5007).
+  • When to use: Once your physical Rover and Drone hardware builds are finished and transmitting live.
+
+    ./run_backend.sh network
+    # or
+    python run.py network
+
+  #### 💻 Mode 3: Offline Local Simulator Mode (Bonus)
+
+  • What it does: Runs all subsystems in local memory on your MacBook.
+  • When to use: Testing the web dashboard at home when you don't have the Raspberry Pi or ESP32 with you.
+
+    ./run_backend.sh sim
+    # or
+    python run.py sim

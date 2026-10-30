@@ -305,6 +305,57 @@ class DroneUDPReceiver:
         self.protocol = DroneUDPProtocol(config, broadcaster, lander_manager=lander_manager)
         self._transport: Optional[asyncio.DatagramTransport] = None
         self._monitor_task: Optional[asyncio.Task[None]] = None
+        self._simulator_task: Optional[asyncio.Task[None]] = None
+
+    async def _simulator_loop(self) -> None:
+        """Simulate drone telemetry when drone_simulator is configured and no external packets arrive."""
+        tick = 0
+        phases = ["STANDBY", "TAKEOFF", "CRUISING", "HOVERING", "LANDING"]
+        while True:
+            await asyncio.sleep(0.5)
+            # Skip if external packet arrived recently
+            if self.protocol._last_seen_mono and (
+                time.monotonic() - self.protocol._last_seen_mono < self.protocol.config.drone_offline_timeout_s
+            ):
+                continue
+            tick += 1
+            phase = phases[(tick // 15) % len(phases)]
+            lat = round(12.9716 + 0.0001 * math.sin(tick / 5.0), 6)
+            lon = round(77.5946 + 0.0001 * math.cos(tick / 5.0), 6)
+            alt = round(max(0.0, 50.0 + 10.0 * math.sin(tick / 10.0)) if phase != "STANDBY" else 0.0, 1)
+            parsed = {
+                "device_id": "esp32-drone",
+                "sequence": tick,
+                "timestamp_ms": int(time.time() * 1000),
+                "flight_status": phase,
+                "orientation": {
+                    "roll": round(1.5 * math.sin(tick / 3.0), 1),
+                    "pitch": round(1.2 * math.cos(tick / 4.0), 1),
+                    "yaw": round((tick * 5.0) % 360.0, 1),
+                },
+                "environment": {
+                    "temperature_c": 22.5,
+                    "pressure_hpa": 1013.2,
+                    "humidity_pct": 48.0,
+                },
+                "gps": {
+                    "latitude": lat,
+                    "longitude": lon,
+                    "altitude_m": alt,
+                },
+                "battery": {
+                    "voltage_v": round(11.1 + (tick % 100) * 0.015, 2),
+                    "percentage": round(100.0 - (tick * 0.1) % 90.0, 1),
+                },
+            }
+            self.protocol._telemetry = parsed
+            self.protocol._last_seq = tick
+            self.protocol._last_seen_mono = time.monotonic()
+            self.protocol._last_seen = datetime.now(timezone.utc).isoformat()
+            self.protocol._last_online = True
+            await self.protocol._broadcast_status()
+            if self.protocol.lander_manager is not None:
+                await self.protocol.lander_manager.forward_drone_telemetry(parsed, online=True)
 
     async def start(self) -> None:
         loop = asyncio.get_running_loop()
@@ -318,17 +369,24 @@ class DroneUDPReceiver:
                 self.protocol.monitor_staleness(),
                 name="drone_udp_staleness",
             )
+            if self.protocol.config.drone_simulator:
+                self._simulator_task = asyncio.create_task(
+                    self._simulator_loop(),
+                    name="drone_udp_simulator",
+                )
         except OSError as exc:
             logger.warning("Could not bind drone UDP listener on port %s: %s", self.protocol.config.drone_udp_port, exc)
 
     async def stop(self) -> None:
-        if self._monitor_task is not None:
-            self._monitor_task.cancel()
-            try:
-                await self._monitor_task
-            except asyncio.CancelledError:
-                pass
-            self._monitor_task = None
+        for task_attr in ("_monitor_task", "_simulator_task"):
+            task = getattr(self, task_attr, None)
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                setattr(self, task_attr, None)
         if self._transport is not None:
             self._transport.close()
             self._transport = None

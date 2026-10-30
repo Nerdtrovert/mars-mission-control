@@ -1,8 +1,10 @@
 import asyncio
 from contextlib import asynccontextmanager
+import os
 from pathlib import Path
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router, active_runner, rover_runner, drone_runner, storage, dashboard_broadcaster
@@ -12,6 +14,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 if not FRONTEND_DIR.exists():
     FRONTEND_DIR = Path("frontend").resolve()
+
+COLLEGE_DIR = BASE_DIR / "frontend-college"
+if not COLLEGE_DIR.exists():
+    COLLEGE_DIR = Path("frontend-college").resolve()
 
 
 @asynccontextmanager
@@ -58,10 +64,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 @app.middleware("http")
 async def add_cache_control_headers(request: Request, call_next):
     response: Response = await call_next(request)
-    if request.url.path.startswith("/static/") or request.url.path == "/dashboard":
+    if (
+        request.url.path.startswith("/static/")
+        or request.url.path.startswith("/college/")
+        or request.url.path in ("/dashboard", "/college")
+    ):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -71,6 +90,9 @@ async def add_cache_control_headers(request: Request, call_next):
 # Mount static frontend assets
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+
+if COLLEGE_DIR.exists():
+    app.mount("/college", StaticFiles(directory=str(COLLEGE_DIR), html=True), name="college")
 
 app.include_router(router)
 
@@ -91,6 +113,11 @@ async def health_check():
         "status": "healthy",
         "simulation_mode": getattr(active_runner, "IS_SIMULATOR", True),
     }
+
+
+@app.get("/college", include_in_schema=False)
+async def get_college():
+    return RedirectResponse(url="/college/")
 
 
 @app.get("/dashboard")

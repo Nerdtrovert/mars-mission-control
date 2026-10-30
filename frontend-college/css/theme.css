@@ -102,6 +102,17 @@ html, body {
   align-items: center;
   gap: 0.5rem;
   white-space: nowrap;
+  flex-shrink: 0; /* Prevent pills from shrinking below content */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Responsive status pills */
+@media (max-width: 768px) {
+  .status-pill {
+    font-size: 0.75rem;
+    padding: 0.35rem 0.65rem;
+  }
 }
 
 .pill-dot {
@@ -153,5 +164,98 @@ html, body {
 .footer-right {
   font-weight: 600;
   color: var(--slate-300);
+}
+
+/* --- Dynamic Status & Pill Highlights --- */
+.pill-dot.online {
+  background: var(--green-400) !important;
+  color: var(--green-400) !important;
+}
+
+.pill-dot.offline {
+  background: var(--red-400) !important;
+  color: var(--red-400) !important;
+}
+
+.pill-dot.stale,
+.pill-dot.standalone {
+  background: var(--amber-400) !important;
+  color: var(--amber-400) !important;
+}
+
+.metric-health.ok {
+  color: var(--green-400);
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.metric-health.failed {
+  color: var(--red-400);
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.preview-alert-banner.banner-disrupted {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(15, 23, 42, 0.75) 100%) !important;
+  border-color: rgba(239, 68, 68, 0.65) !important;
+  color: #fca5a5 !important;
+}
+
+.preview-alert-banner.banner-nominal {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.14) 0%, rgba(15, 23, 42, 0.65) 100%) !important;
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  color: var(--green-400) !important;
+}
+
+.btn-control:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn-success-control:hover {
+  border-color: var(--green-400) !important;
+  box-shadow: 0 0 20px var(--green-glow) !important;
+}
+
+.btn-warning-control:hover {
+  border-color: var(--amber-400) !important;
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.35) !important;
+}
+
+/* Badge tags for table items */
+.badge-status {
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  display: inline-block;
+  font-family: var(--font-mono);
+}
+
+.badge-status-completed,
+.badge-status-acknowledged,
+.badge-status-ok {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--green-400);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.badge-status-rejected,
+.badge-status-failed,
+.badge-status-error {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--red-400);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.badge-status-created,
+.badge-status-sent,
+.badge-status-pending,
+.badge-status-warn {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--amber-400);
+  border: 1px solid rgba(251, 191, 36, 0.35);
 }
 

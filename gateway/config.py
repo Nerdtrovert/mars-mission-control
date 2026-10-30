@@ -22,6 +22,8 @@ class GatewayConfig:
     drone_udp_host: str = field(default_factory=lambda: os.getenv("DRONE_UDP_HOST") or "0.0.0.0")
     drone_udp_port: int = field(default_factory=lambda: int(os.getenv("DRONE_UDP_PORT") or "5007"))
     drone_offline_timeout_s: float = field(default_factory=lambda: float(os.getenv("DRONE_OFFLINE_TIMEOUT_S") or "5.0"))
+    rover_simulator: bool = field(default_factory=lambda: os.getenv("ROVER_SIMULATOR", "false").lower() in ("true", "1", "yes"))
+    drone_simulator: bool = field(default_factory=lambda: os.getenv("DRONE_SIMULATOR", "false").lower() in ("true", "1", "yes"))
     version: str = "1.0.0"
     device_id: str = "esp32-lander"
     device_name: str = "ESP32 Lander Controller"

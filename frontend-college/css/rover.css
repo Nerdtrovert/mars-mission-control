@@ -43,6 +43,12 @@
   display: grid;
   grid-template-columns: 1.2fr 1fr;
   gap: 1.5rem;
+  align-items: start;
+}
+
+/* Ensure grid children don't overflow their tracks */
+.rover-grid > .hud-card {
+  min-width: 0;
 }
 
 /* --- Card 1: Tactical Mars Terrain Map --- */
@@ -54,6 +60,8 @@
   padding-bottom: 1rem;
   margin-bottom: 1.25rem;
   border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap; /* Allow wrapping on narrow screens */
+  min-width: 0; /* Prevent overflow in grid */
 }
 
 .rover-map-title {
@@ -97,6 +105,7 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 1rem;
+  min-width: 0; /* Prevent canvas overflow in grid */
 }
 
 .terrain-canvas {
@@ -133,6 +142,9 @@
   font-family: var(--font-mono);
   font-size: 0.85rem;
   color: var(--slate-300);
+  min-width: 0; /* Prevent overflow in grid */
+  flex-wrap: wrap; /* Allow wrapping on narrow screens */
+  gap: 0.5rem;
 }
 
 .legend-item {
@@ -173,6 +185,7 @@
   min-height: 220px;
   margin-bottom: 1.25rem;
   overflow: hidden;
+  min-width: 0; /* Prevent overflow in grid */
 }
 
 .rover-svg-schematic {
@@ -181,6 +194,7 @@
   height: auto;
   color: var(--cyan-400);
   filter: drop-shadow(0 0 12px var(--cyan-glow));
+  min-width: 0; /* Prevent SVG overflow */
 }
 
 .blueprint-decorative-tag {
@@ -202,6 +216,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  min-width: 0; /* Prevent overflow in grid */
 }
 
 .radar-alert-header {
@@ -230,6 +245,7 @@
   border-radius: var(--radius-full);
   overflow: hidden;
   position: relative;
+  min-width: 0; /* Prevent overflow in grid */
 }
 
 .radar-distance-fill {
@@ -249,7 +265,7 @@
 /* --- Card 3: Rover Telemetry Grid (Full Width) --- */
 .rover-telemetry-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 1rem;
   margin-bottom: 1.25rem;
 }
@@ -289,7 +305,7 @@
 /* Responsive */
 @media (max-width: 1200px) {
   .rover-telemetry-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -298,7 +314,7 @@
     grid-template-columns: 1fr;
   }
   .rover-telemetry-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .rover-navbar {
     flex-direction: column;

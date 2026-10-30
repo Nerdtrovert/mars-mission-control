@@ -117,6 +117,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap; /* Allow wrapping on narrow screens */
 }
 
 /* Standalone Warning Banner */
@@ -146,6 +147,12 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
+  align-items: start; /* Align cards to top for consistent alignment */
+}
+
+/* Ensure grid children don't overflow their tracks */
+.lander-grid > .hud-card {
+  min-width: 0;
 }
 
 /* Card Base (Glassmorphic) */
@@ -173,6 +180,9 @@
   padding-bottom: 1rem;
   margin-bottom: 1.25rem;
   border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap; /* Allow wrapping on narrow screens */
+  gap: 0.5rem;
+  min-width: 0; /* Prevent overflow in grid */
 }
 
 .hud-card-title {
@@ -231,9 +241,15 @@
 /* 3-State Indicators Grid (Active, Not Active, Unrecognized) */
 .lander-states-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.85rem;
   margin-bottom: 1.25rem;
+}
+
+@media (max-width: 550px) {
+  .lander-states-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .state-badge-item {
@@ -318,9 +334,15 @@
 /* Hardware Specs Grid */
 .lander-specs-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.65rem;
   margin-bottom: 0.5rem;
+}
+
+@media (max-width: 450px) {
+  .lander-specs-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .lander-spec-item {
@@ -351,16 +373,34 @@
 
 .bottom-controls-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .bottom-controls-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .bottom-controls-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Preview Controls Grid */
 .controls-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.85rem;
   margin-bottom: 1.25rem;
+}
+
+@media (max-width: 480px) {
+  .controls-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .btn-control {
@@ -440,8 +480,15 @@
 /* --- Card 2: Environmental Telemetry (Sensors) --- */
 .sensors-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
+}
+
+/* Responsive sensor grid */
+@media (max-width: 500px) {
+  .sensors-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .metric-box {
@@ -453,6 +500,7 @@
   flex-direction: column;
   justify-content: space-between;
   transition: border-color 0.2s ease;
+  min-width: 0; /* Prevent overflow in grid */
 }
 
 .metric-box:hover {
@@ -521,6 +569,11 @@
   border-radius: var(--radius-md);
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(10, 15, 28, 0.35);
+  min-width: 0; /* Prevent table overflow */
+}
+
+.hud-table {
+  min-width: 600px; /* Ensure table content has minimum width */
 }
 
 .hud-table {

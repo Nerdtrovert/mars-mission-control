@@ -56,6 +56,24 @@ header.dashboard-header {
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
+  min-width: 0; /* Prevents flex overflow */
+}
+
+@media (max-width: 767px) {
+  header.dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .status-badges {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .badge {
+    font-size: 0.65rem;
+    padding: 0.25rem 0.5rem;
+  }
 }
 
 .brand-section {
@@ -193,16 +211,66 @@ header.dashboard-header {
   gap: 1.25rem;
 }
 
-@media (min-width: 1024px) {
+/* Mobile: single column, all cards stacked */
+
+/* Tablet: 2 columns, sidebar cards on left, main content on right */
+@media (min-width: 768px) {
   .dashboard-grid {
-    grid-template-columns: 1.1fr 1fr;
+    grid-template-columns: 1fr 1fr;
   }
+
+  /* Left column: Lander status + Sensor telemetry */
+  .lander-status-card { grid-column: 1; grid-row: 1; }
+  .lander-status-card + .card { grid-column: 1; grid-row: 2; }
+
+  /* Right column: Rover + Drone */
+  .rover-card { grid-column: 2; grid-row: 1; }
+  .drone-card { grid-column: 2; grid-row: 2; }
+
+  /* Full-width tables below */
+  .card:nth-of-type(5) { grid-column: 1 / -1; grid-row: 3; }
+  .card:nth-of-type(6) { grid-column: 1; grid-row: 4; }
+  .card:nth-of-type(7) { grid-column: 2; grid-row: 4; }
 }
 
-@media (min-width: 1440px) {
+/* Desktop: 3 columns for better space utilization */
+@media (min-width: 1200px) {
   .dashboard-grid {
     grid-template-columns: 1fr 1fr 1fr;
   }
+
+  /* Column 1: Lander System Status */
+  .lander-status-card { grid-column: 1; grid-row: 1; }
+
+  /* Column 2: Lander Sensor Telemetry */
+  .lander-status-card + .card { grid-column: 2; grid-row: 1; }
+
+  /* Column 3: Rover Telemetry */
+  .rover-card { grid-column: 3; grid-row: 1; }
+
+  /* Row 2: Drone Telemetry spans col 1-2, or place it */
+  .drone-card { grid-column: 1 / 3; grid-row: 2; }
+
+  /* Full-width tables below */
+  .card:nth-of-type(5) { grid-column: 1 / -1; grid-row: 3; }
+  .card:nth-of-type(6) { grid-column: 1 / 2; grid-row: 4; }
+  .card:nth-of-type(7) { grid-column: 2 / 4; grid-row: 4; }
+}
+
+/* Large desktop: 4 columns for maximum density */
+@media (min-width: 1600px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+  }
+
+  .lander-status-card { grid-column: 1; grid-row: 1; }
+  .lander-status-card + .card { grid-column: 2; grid-row: 1; }
+  .rover-card { grid-column: 3; grid-row: 1; }
+  .drone-card { grid-column: 4; grid-row: 1; }
+
+  .card:nth-of-type(5) { grid-column: 1 / -1; grid-row: 2; }
+  .card:nth-of-type(6) { grid-column: 1 / 3; grid-row: 3; }
+  .card:nth-of-type(7) { grid-column: 3 / 5; grid-row: 3; }
 }
 
 /* Dashboard Cards */
@@ -215,6 +283,7 @@ header.dashboard-header {
   flex-direction: column;
   gap: 1rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 0; /* Critical for grid children to prevent overflow */
 }
 
 .card-header {
@@ -298,6 +367,30 @@ header.dashboard-header {
   gap: 0.75rem;
 }
 
+@media (max-width: 479px) {
+  .drone-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  .drone-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .drone-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
+  .drone-metrics {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
 .drone-event {
   color: var(--color-amber);
   background: var(--bg-primary);
@@ -342,6 +435,24 @@ header.dashboard-header {
   gap: 0.75rem;
 }
 
+@media (max-width: 479px) {
+  .rover-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  .rover-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .rover-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .rover-event {
   color: var(--color-cyan);
   background: var(--bg-primary);
@@ -380,6 +491,12 @@ header.dashboard-header {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem;
+}
+
+@media (max-width: 479px) {
+  .controls-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .btn {
@@ -461,8 +578,27 @@ header.dashboard-header {
 /* Sensor Telemetry Cards */
 .sensors-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+/* Responsive metric grids */
+@media (max-width: 599px) {
+  .sensors-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 899px) {
+  .sensors-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .sensors-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .metric-box {
@@ -473,6 +609,7 @@ header.dashboard-header {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-width: 0; /* Prevents overflow in grid */
 }
 
 .metric-header {
@@ -538,6 +675,7 @@ header.dashboard-header {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   background-color: var(--bg-primary);
+  min-width: 0; /* Prevents grid overflow */
 }
 
 table.data-table {
@@ -546,6 +684,7 @@ table.data-table {
   font-size: 0.78rem;
   font-family: var(--font-mono);
   text-align: left;
+  min-width: 600px; /* Minimum width for table content */
 }
 
 table.data-table th {
