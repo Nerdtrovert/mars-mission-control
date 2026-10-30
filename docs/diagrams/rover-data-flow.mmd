@@ -1,0 +1,14 @@
+```mermaid
+flowchart TD
+    subgraph RoverFlow["Surface Rover Telemetry Data Flow"]
+        Sensors["HC-SR04 & MPU6050 Sensors\n(~50 Hz sampling)"] -->|UART 9600 baud| HC12_TX["HC-12 Transceiver (Rover Chassis)"]
+        HC12_TX -.->|433 MHz Wireless RF| HC12_RX["HC-12 Receiver (USB Virtual COM)"]
+        HC12_RX -->|Serial Read| LaptopGUI["Rover Laptop Tkinter GUI\n(ASCII Parser & Validator)"]
+        LaptopGUI -->|UDP Port 5005\nASCII Datagram| PiUDP["Raspberry Pi RoverUDPReceiver\n(Ascii Parser & Bounds Clamping)"]
+        PiUDP -->|Internal Message Bus| PiMgr["Pi LanderManager"]
+        PiMgr -->|mission_display JSON\nover TCP Port 5006| LanderLCD["Lander ESP32 20x4 LCD\n(Page 3: MARS ROVER)"]
+        PiMgr -->|WebSocket /ws/telemetry\nover Port 8001| MacRunner["Mac RoverRunner / NetworkRunner"]
+        MacRunner -->|Broadcast Sync| MacWS["Mac DashboardBroadcaster"]
+        MacWS -->|WebSocket Stream| Browser["Exhibition Browser HUD\n(Surface Rover Tactical Page)"]
+    end
+```

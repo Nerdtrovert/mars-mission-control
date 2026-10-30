@@ -9,12 +9,10 @@ venv/
 .env
 .env.*
 .env*.local
-Lander/lander/lander_config.h
+lander/lander_config.h
 !.env.example
 !*.env.example
 !.env*.example
-!.env.hybrid
-!.env.network
 
 # Runtime databases and logs
 *.db

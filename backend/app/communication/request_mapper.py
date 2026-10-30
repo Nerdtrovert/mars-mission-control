@@ -1,6 +1,6 @@
 """Gateway Boundary Request ID Mapper.
 
-Manages bidirectional mapping between MacBook UUID command_ids and
+Manages bidirectional mapping between development machine UUID command_ids and
 ESP32 32-bit integer request_ids at the gateway boundary.
 """
 
@@ -14,7 +14,7 @@ from typing import Optional
 class RequestIdMapper:
     """
     Thread-safe mapper for allocating and correlating integer request_ids
-    (for ESP32 serial protocol) with UUID command_ids (for MacBook backend).
+    (for ESP32 serial protocol) with UUID command_ids (for development machine backend).
     """
 
     MAX_REQUEST_ID = 2_147_483_647  # int32_t positive range

@@ -1,0 +1,29 @@
+```mermaid
+flowchart TD
+    subgraph WIFINetwork["Dedicated Local Wi-Fi Network\nSSID: Mission-Control | Subnet: 192.168.50.0/24"]
+        PiAP["Raspberry Pi 4 AP & Gateway\nStatic IP: 192.168.50.1\nDHCP Scope: .10 - .100"]
+
+        LanderClient["ESP32 Lander Client\nDHCP Assigned IP"]
+        RoverLaptopClient["Rover Windows Laptop\nDHCP Assigned IP"]
+        DroneClient["Drone ESP32 Client\nDHCP Assigned IP"]
+        MacClient["MacBook Mission Control\nDHCP Assigned IP"]
+
+        PiAP -.->|802.11 b/g/n AP| LanderClient
+        PiAP -.->|802.11 b/g/n AP| RoverLaptopClient
+        PiAP -.->|802.11 b/g/n AP| DroneClient
+        PiAP -.->|802.11 b/g/n AP| MacClient
+    end
+
+    subgraph PortMapping["Network Communication Ports"]
+        LanderClient ===|TCP Port 5006\n(Newline-delimited JSON)| PiAP
+        RoverLaptopClient ===|UDP Port 5005\n(ASCII Datagrams)| PiAP
+        DroneClient ===|UDP Port 5007\n(JSON Datagrams)| PiAP
+        MacClient ===|HTTP & WebSocket Port 8001\n(REST API & /ws/telemetry)| PiAP
+    end
+
+    subgraph InternalMac["MacBook Localhost Ports"]
+        MacBackend["FastAPI Backend\n0.0.0.0:8000"]
+        MacBrowser["Browser Dashboard\nlocalhost:8000/college"]
+        MacBackend <==>|Internal WS /ws/telemetry| MacBrowser
+    end
+```

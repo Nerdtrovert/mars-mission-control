@@ -1,0 +1,52 @@
+```mermaid
+flowchart TD
+    %% -------------------------------------------------------------------------
+    %% 1. ROVER TELEMETRY DATA FLOW
+    %% -------------------------------------------------------------------------
+    subgraph RoverFlow["1. Surface Rover Telemetry Data Flow"]
+        R_Sensors["HC-SR04 & MPU6050 Sensors\n(50 Hz polling)"] -->|UART 9600| R_HC12_TX["HC-12 Transmitter (Chassis)"]
+        R_HC12_TX -.->|433 MHz RF| R_HC12_RX["HC-12 Receiver (USB)"]
+        R_HC12_RX -->|COM Port Read| R_GUI["Rover Laptop Tkinter GUI"]
+        R_GUI -->|UDP Port 5005\nASCII Datagram| R_PiUDP["Pi RoverUDPReceiver\n(Ascii Parser & Bounds Clamping)"]
+        R_PiUDP -->|Internal Message Bus| R_PiMgr["Pi LanderManager"]
+        R_PiMgr -->|mission_display JSON\nover TCP Port 5006| R_LCD["Lander ESP32 20x4 LCD\n(Page 3: MARS ROVER)"]
+        R_PiMgr -->|WS rover_telemetry\nover Port 8001| R_MacRunner["Mac RoverRunner / NetworkRunner"]
+        R_MacRunner -->|Broadcast Sync| R_MacWS["Mac DashboardBroadcaster"]
+        R_MacWS -->|WS Stream| R_Browser["Exhibition Browser HUD\n(Rover Tactical Page)"]
+    end
+
+    %% -------------------------------------------------------------------------
+    %% 2. DRONE TELEMETRY DATA FLOW
+    %% -------------------------------------------------------------------------
+    subgraph DroneFlow["2. Aerial Drone Telemetry Data Flow"]
+        D_Sensors["GPS, IMU, Env & Battery Sensors"] --> D_MCU["Drone ESP32 Controller"]
+        D_MCU -->|UDP Port 5007\nJSON Datagram| D_PiUDP["Pi DroneUDPReceiver\n(RFC 1982 Rollover & Validation)"]
+        D_PiUDP -->|Internal Message Bus| D_PiMgr["Pi LanderManager"]
+        D_PiMgr -->|mission_display JSON\nover TCP Port 5006| D_LCD["Lander ESP32 20x4 LCD\n(Page 4: AERIAL DRONE)"]
+        D_PiMgr -->|WS drone_telemetry\nover Port 8001| D_MacRunner["Mac DroneRunner / NetworkRunner"]
+        D_MacRunner -->|Broadcast Sync| D_MacWS["Mac DashboardBroadcaster"]
+        D_MacWS -->|WS Stream| D_Browser["Exhibition Browser HUD\n(Drone Radar Page)"]
+    end
+
+    %% -------------------------------------------------------------------------
+    %% 3. LANDER TELEMETRY & COMMAND DATA FLOW
+    %% -------------------------------------------------------------------------
+    subgraph LanderFlow["3. Lander Telemetry & Command Data Flow"]
+        L_Sensors["BMP280 & DHT11 Sensors\n(~1 Hz Active Polling)"] --> L_ESP["Lander ESP32 Firmware"]
+        L_ESP -->|TCP Port 5006\nNewline-Delimited JSON| L_PiTCP["Pi LanderTCPTransport\n(Buffer & Framing)"]
+        L_PiTCP --> L_PiMgr["Pi LanderManager\n(Command Correlation & Staleness)"]
+        L_PiMgr -->|WS telemetry\nover Port 8001| L_MacRunner["Mac NetworkGatewayRunner"]
+        L_MacRunner --> L_TelemService["Mac TelemetryService\n(Processor & Safety Validator)"]
+        L_TelemService --> L_SQLite["SQLite Storage\n(300s Sliding History)"]
+        L_TelemService --> L_State["Mac MissionStateManager\n(ACTIVE/STANDBY & ONLINE)"]
+        L_State --> L_MacWS["Mac DashboardBroadcaster"]
+        L_MacWS -->|WS Stream| L_Browser["Exhibition Browser HUD\n(Lander Station Page)"]
+
+        %% Operator Command Flow
+        L_Browser -.->|POST /api/lander/command\n(SET_ACTIVE, SET_STANDBY)| L_BackendAPI["Mac Backend Routes"]
+        L_BackendAPI -.->|CommandTracker Safety Check| L_Client["GatewayClient"]
+        L_Client -.->|POST /api/lander/command| L_PiMgr
+        L_PiMgr -.->|TCP Port 5006 JSON| L_ESP
+        L_ESP -.->|TCP command_ack JSON| L_PiMgr
+    end
+```

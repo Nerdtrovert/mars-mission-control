@@ -3,319 +3,1062 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mars Mission Control — Exhibition Dashboard</title>
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=1.3.4">
+  <title>Mars Mission Control | Mission Dashboard</title>
+  <meta name="description" content="Aerospace Exhibition Mars Mission Control Surface & Reconnaissance Dashboard">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/static/assets/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/assets/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/assets/favicon-16.png">
+  <link rel="apple-touch-icon" href="/static/assets/apple-touch-icon.png">
+  <link rel="manifest" href="/static/assets/site.webmanifest">
+
+  <!-- Modern Aerospace Stylesheets -->
+  <link rel="stylesheet" href="/static/css/theme.css">
+  <link rel="stylesheet" href="/static/css/landing.css">
+  <link rel="stylesheet" href="/static/css/lander.css">
+  <link rel="stylesheet" href="/static/css/rover.css">
+  <link rel="stylesheet" href="/static/css/drone.css">
 </head>
 <body>
 
-  <!-- Top Navigation & System Status Bar -->
-  <header class="dashboard-header">
-    <div class="brand-section">
-      <div class="mars-badge">MMC-1</div>
-      <div class="title-group">
-        <h1>MARS MISSION CONTROL</h1>
-        <p>AEROSPACE EXHIBITION • LANDER & ROVER TELEMETRY</p>
+  <div class="landing-viewport">
+
+    <!-- Layer 1: Mars Atmosphere Background -->
+    <div class="mars-bg-layer"></div>
+    <div class="mars-bg-overlay"></div>
+
+    <!-- View Panel 1: Mission Overview Landing Screen -->
+    <div id="landing-view" class="view-panel">
+
+      <!-- Header: Mission Identity & System Status -->
+      <header class="mission-header">
+        <div class="header-left">
+          <div class="mars-logo" aria-hidden="true">
+            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="32" cy="32" r="30" fill="#070302"/>
+              <circle cx="32" cy="32" r="24" fill="#c04128"/>
+              <ellipse cx="24" cy="24" rx="9" ry="5" fill="#a03520" opacity="0.6"/>
+              <ellipse cx="42" cy="38" rx="7" ry="4" fill="#a03520" opacity="0.5"/>
+              <ellipse cx="18" cy="44" rx="5" ry="3" fill="#a03520" opacity="0.4"/>
+              <circle cx="32" cy="32" r="26" fill="none" stroke="#e05638" stroke-width="1.5" opacity="0.3"/>
+            </svg>
+          </div>
+          <div class="header-text">
+            <h1 class="mission-title">MARS MISSION CONTROL</h1>
+            <span class="mission-subtitle">EXPLORE &middot; MONITOR &middot; ANALYZE</span>
+          </div>
+        </div>
+        <div class="header-center">
+          <div class="system-status">
+            <span class="status-indicator" id="system-init-indicator">
+              <span class="status-dot initializing" id="system-init-dot"></span>
+              <span id="system-init-text">SYSTEM INITIALIZING</span>
+            </span>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="mode-indicator">
+            <span class="mode-label">OPERATING MODE</span>
+            <span class="mode-value" id="operating-mode">SIMULATION</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Hero Section: Mission Emblem -->
+      <section class="hero-section" aria-label="Mission Emblem">
+        <div class="hero-emblem" aria-hidden="true">
+          <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Outer orbital rings -->
+            <circle cx="100" cy="100" r="92" fill="none" stroke="#e05638" stroke-width="1" opacity="0.2"/>
+            <circle cx="100" cy="100" r="82" fill="none" stroke="#e05638" stroke-width="1" opacity="0.15"/>
+            <circle cx="100" cy="100" r="72" fill="none" stroke="#e05638" stroke-width="1" opacity="0.1"/>
+
+            <!-- Mars planet -->
+            <circle cx="100" cy="100" r="58" fill="#c04128"/>
+            <ellipse cx="92" cy="92" rx="22" ry="12" fill="#a03520" opacity="0.5"/>
+            <ellipse cx="115" cy="112" rx="16" ry="9" fill="#a03520" opacity="0.4"/>
+            <ellipse cx="85" cy="120" rx="10" ry="6" fill="#a03520" opacity="0.3"/>
+
+            <!-- Atmospheric glow -->
+            <circle cx="100" cy="100" r="62" fill="none" stroke="#e05638" stroke-width="2" opacity="0.3"/>
+
+            <!-- Crosshair / targeting reticle -->
+            <circle cx="100" cy="100" r="40" fill="none" stroke="#fbbf24" stroke-width="0.8" opacity="0.4"/>
+            <line x1="100" y1="60" x2="100" y2="50" stroke="#fbbf24" stroke-width="1" opacity="0.6"/>
+            <line x1="100" y1="140" x2="100" y2="150" stroke="#fbbf24" stroke-width="1" opacity="0.6"/>
+            <line x1="60" y1="100" x2="50" y2="100" stroke="#fbbf24" stroke-width="1" opacity="0.6"/>
+            <line x1="140" y1="100" x2="150" y2="100" stroke="#fbbf24" stroke-width="1" opacity="0.6"/>
+
+            <!-- Orbital path -->
+            <ellipse cx="100" cy="100" rx="70" ry="35" fill="none" stroke="#38bdf8" stroke-width="1" opacity="0.2" transform="rotate(-25 100 100)"/>
+
+            <!-- Small orbiting satellite indicator -->
+            <circle cx="160" cy="75" r="3" fill="#38bdf8" opacity="0.8">
+              <animateMotion dur="8s" repeatCount="indefinite" path="M 160 75 A 60 30 0 1 1 40 125 A 60 30 0 1 1 160 75" />
+            </circle>
+          </svg>
+        </div>
+        <div class="hero-text">
+          <h2 class="hero-heading">MARS MISSION CONTROL</h2>
+          <p class="hero-tagline">EXPLORE &middot; MONITOR &middot; ANALYZE</p>
+        </div>
+      </section>
+
+      <!-- Subsystem Cards Grid -->
+      <main class="translucent-nav-grid" role="navigation" aria-label="Mission Subsystems">
+
+        <!-- Card 1: LANDER STATION -->
+        <button class="translucent-card" data-subsystem="lander" aria-label="Open Lander Station Dashboard">
+          <div class="card-icon-area" aria-hidden="true">
+            <svg class="card-line-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="22 24 42 24 46 38 18 38" />
+              <line x1="32" y1="16" x2="32" y2="24" />
+              <circle cx="32" cy="14" r="2" />
+              <line x1="20" y1="38" x2="10" y2="52" />
+              <line x1="16" y1="44" x2="24" y2="38" />
+              <line x1="6" y1="52" x2="14" y2="52" />
+              <line x1="44" y1="38" x2="54" y2="52" />
+              <line x1="48" y1="44" x2="40" y2="38" />
+              <line x1="50" y1="52" x2="58" y2="52" />
+              <path d="M28 38v4h8v-4" />
+            </svg>
+          </div>
+          <span class="card-label">LANDER STATION</span>
+          <div class="card-status-indicator" id="landing-status-lander">
+            <span class="pill-dot stale" id="landing-dot-lander"></span>
+            <span id="landing-text-lander">NOT CONNECTED</span>
+          </div>
+          <div class="card-arrow-wrap" aria-hidden="true">
+            <svg class="card-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </div>
+        </button>
+
+        <!-- Card 2: SURFACE ROVER -->
+        <button class="translucent-card" data-subsystem="rover" aria-label="Open Surface Rover Dashboard">
+          <div class="card-icon-area" aria-hidden="true">
+            <svg class="card-line-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="42" y1="18" x2="42" y2="34" />
+              <rect x="38" y="12" width="8" height="6" rx="1" />
+              <path d="M16 34h28v10H16z" />
+              <path d="M22 28h14v6H22z" />
+              <line x1="20" y1="44" x2="16" y2="50" />
+              <line x1="28" y1="44" x2="26" y2="50" />
+              <line x1="36" y1="44" x2="38" y2="50" />
+              <line x1="44" y1="44" x2="48" y2="50" />
+              <circle cx="16" cy="50" r="4" />
+              <circle cx="26" cy="50" r="4" />
+              <circle cx="38" cy="50" r="4" />
+              <circle cx="48" cy="50" r="4" />
+            </svg>
+          </div>
+          <span class="card-label">SURFACE ROVER</span>
+          <div class="card-status-indicator" id="landing-status-rover">
+            <span class="pill-dot stale" id="landing-dot-rover"></span>
+            <span id="landing-text-rover">NOT CONNECTED</span>
+          </div>
+          <div class="card-arrow-wrap" aria-hidden="true">
+            <svg class="card-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </div>
+        </button>
+
+        <!-- Card 3: AERIAL DRONE -->
+        <button class="translucent-card" data-subsystem="drone" aria-label="View Aerial Drone Subsystem Details">
+          <div class="card-icon-area" aria-hidden="true">
+            <svg class="card-line-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="26" y="24" width="12" height="14" rx="2" />
+              <line x1="32" y1="18" x2="32" y2="24" />
+              <line x1="14" y1="18" x2="50" y2="18" />
+              <ellipse cx="20" cy="18" rx="6" ry="1.2" />
+              <ellipse cx="44" cy="18" rx="6" ry="1.2" />
+              <circle cx="32" cy="35" r="2" />
+              <line x1="28" y1="38" x2="22" y2="48" />
+              <line x1="36" y1="38" x2="42" y2="48" />
+              <line x1="18" y1="48" x2="26" y2="48" />
+              <line x1="38" y1="48" x2="46" y2="48" />
+            </svg>
+          </div>
+          <span class="card-label">AERIAL DRONE</span>
+          <div class="card-status-indicator" id="landing-status-drone">
+            <span class="pill-dot stale" id="landing-dot-drone"></span>
+            <span id="landing-text-drone">NOT CONNECTED</span>
+          </div>
+          <div class="card-arrow-wrap" aria-hidden="true">
+            <svg class="card-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </div>
+        </button>
+
+      </main>
+
+      <!-- Footer: Mission Network Status -->
+      <footer class="mission-footer">
+        <div class="footer-left">
+          <span class="footer-label">MISSION NETWORK</span>
+          <span class="footer-status" id="network-status">
+            <span class="status-dot" id="network-dot"></span>
+            <span id="network-text">CONNECTING</span>
+          </span>
+          <span class="footer-divider" aria-hidden="true">|</span>
+          <span class="footer-label">GATEWAY</span>
+          <span class="footer-status" id="gateway-status">
+            <span class="status-dot" id="gateway-dot"></span>
+            <span id="gateway-text">DISCONNECTED</span>
+          </span>
+        </div>
+        <div class="footer-right">
+          <span class="footer-label" id="footer-mode-label">MODE</span>
+          <span class="footer-value" id="footer-mode">SIMULATION</span>
+          <span class="footer-divider" aria-hidden="true">|</span>
+          <span class="footer-label">LOCAL TIME</span>
+          <span class="footer-value clock-value" id="footer-clock">--:--:-- IST</span>
+        </div>
+      </footer>
+
+    </div><!-- /landing-view -->
+
+    <!-- ========================================== -->
+    <!-- STAGE 2A: LANDER DASHBOARD VIEW PANEL       -->
+    <!-- ========================================== -->
+    <div id="lander-view" class="view-panel hidden">
+      <div class="lander-container">
+
+        <!-- Top Subsystem Navigation Bar -->
+        <header class="lander-navbar">
+          <div class="nav-left">
+            <button id="btn-back-overview" class="btn-nav-back" title="Return to Mission Overview">
+              <span aria-hidden="true">&#x25C0;</span>
+              <span>MISSION OVERVIEW</span>
+            </button>
+            <div class="subsystem-tabs" role="tablist">
+              <button class="nav-tab tab-active" role="tab" aria-selected="true">LANDER (ACTIVE)</button>
+              <button id="btn-tab-lander-to-rover" class="nav-tab" role="tab" aria-selected="false" title="Switch to Rover Dashboard" style="cursor: pointer;">ROVER</button>
+              <button id="btn-tab-lander-to-drone" class="nav-tab" role="tab" aria-selected="false" title="Switch to Drone Dashboard" style="cursor: pointer;">DRONE</button>
+            </div>
+          </div>
+
+          <div class="nav-right">
+            <div class="status-pill clock-pill" id="lander-clock-display" title="Indian Standard Time (UTC+05:30)">
+              --:--:-- IST
+            </div>
+            <div class="status-pill" id="lander-ws-pill" title="WebSocket Connection State">
+              <span class="pill-dot stale" id="lander-ws-dot"></span>
+              <span id="lander-ws-text">WS: CONNECTING</span>
+            </div>
+            <div class="status-pill" id="lander-gw-pill" title="Gateway Connection State">
+              <span class="pill-dot stale" id="lander-gw-dot"></span>
+              <span id="lander-gw-text">GATEWAY: NOT CONNECTED</span>
+            </div>
+            <div class="status-pill" id="lander-dev-pill" title="Lander Device State">
+              <span class="pill-dot stale" id="lander-dev-dot"></span>
+              <span id="lander-dev-text">LANDER: NOT CONNECTED</span>
+            </div>
+            <div class="status-pill" id="lander-mode-pill" title="Operating Mode">
+              <span id="lander-mode-text">MODE: UNKNOWN</span>
+            </div>
+          </div>
+        </header>
+
+        <!-- Connection / Status Banner -->
+        <div class="preview-alert-banner" id="lander-alert-banner">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span class="banner-icon" id="lander-banner-icon" aria-hidden="true">&#x26A0;</span>
+            <span id="lander-banner-text"><strong>CONNECTING:</strong> Linking to Mission Control backend...</span>
+          </div>
+          <span id="lander-banner-tag" style="font-size: 0.85rem; color: var(--slate-400); white-space: nowrap;">MARS MISSION CONTROL</span>
+        </div>
+
+        <!-- Lander Main Grid Layout -->
+        <main class="lander-grid">
+
+          <!-- Card 1: Lander Subsystem Status -->
+          <section class="hud-card">
+            <div class="hud-card-header">
+              <h2 class="hud-card-title">LANDER STATUS</h2>
+              <span class="hud-tag" id="lander-status-tag" style="color: var(--amber-400);">SUBSYSTEM TELEMETRY & HEALTH</span>
+            </div>
+
+            <!-- Authoritative Status Display -->
+            <div id="lander-status-display" class="status-state-display status-state-unrecognized" title="Current operational status of Lander">
+              UNRECOGNIZED
+            </div>
+
+            <!-- 3 Recognized Operational States -->
+            <div class="lander-states-grid">
+              <div id="state-badge-active" class="state-badge-item state-active-option" title="Lander connected, verified, and transmitting nominal telemetry">
+                <div class="state-badge-title">
+                  <span class="state-dot-active"></span>
+                  <span>ACTIVE</span>
+                </div>
+                <span class="state-badge-desc">Online & Nominal</span>
+              </div>
+
+              <div id="state-badge-inactive" class="state-badge-item state-inactive-option" title="Lander offline, disconnected, or powered down">
+                <div class="state-badge-title">
+                  <span class="state-dot-inactive"></span>
+                  <span>NOT ACTIVE</span>
+                </div>
+                <span class="state-badge-desc">Offline / Standby</span>
+              </div>
+
+              <div id="state-badge-unrecognized" class="state-badge-item current-unrecognized" title="Lander state unverified: awaiting telemetry">
+                <div class="state-badge-title">
+                  <span class="state-dot-unrecognized"></span>
+                  <span>UNRECOGNIZED</span>
+                </div>
+                <span class="state-badge-desc">Awaiting Telemetry</span>
+              </div>
+            </div>
+
+            <!-- Hardware Specifications & Protocol Status -->
+            <div class="lander-specs-grid">
+              <div class="lander-spec-item">
+                <span class="lander-spec-label">CONTROLLER</span>
+                <span class="lander-spec-val">ESP32-WROOM-32</span>
+              </div>
+              <div class="lander-spec-item">
+                <span class="lander-spec-label">PROTOCOL</span>
+                <span class="lander-spec-val">JSON TCP 5006</span>
+              </div>
+              <div class="lander-spec-item">
+                <span class="lander-spec-label">LINK STATE</span>
+                <span class="lander-spec-val" id="lander-spec-link" style="color: var(--amber-400);">NOT CONNECTED</span>
+              </div>
+              <div class="lander-spec-item">
+                <span class="lander-spec-label">HANDSHAKE</span>
+                <span class="lander-spec-val" id="lander-spec-handshake" style="color: var(--amber-400);">AWAITING LINK</span>
+              </div>
+            </div>
+
+            <!-- Interlock Notice Bar -->
+            <div class="control-notice-bar" id="lander-interlock-notice" style="margin-top: 0.85rem;">
+              Connecting to local Raspberry Pi gateway and Mission Control backend...
+            </div>
+          </section>
+
+          <!-- Card 2: Environmental Telemetry & Sensor Health -->
+          <section class="hud-card">
+            <div class="hud-card-header">
+              <h2 class="hud-card-title">LANDER SENSOR TELEMETRY</h2>
+              <span class="hud-tag" id="lander-sensors-tag" style="color: var(--amber-400);">STREAMING CONTRACT</span>
+            </div>
+
+            <div class="sensors-grid">
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">BMP280 TEMP</span>
+                  <span class="metric-health standby" id="health-lander-bmp-temp">STANDBY</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-lander-bmp-temp">--</span>
+                  <span class="metric-unit">&#x00B0;C</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">BMP280 PRESSURE</span>
+                  <span class="metric-health standby" id="health-lander-bmp-press">STANDBY</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-lander-bmp-press">--</span>
+                  <span class="metric-unit">hPa</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">DHT11 TEMP</span>
+                  <span class="metric-health standby" id="health-lander-dht-temp">STANDBY</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-lander-dht-temp">--</span>
+                  <span class="metric-unit">&#x00B0;C</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">DHT11 HUMIDITY</span>
+                  <span class="metric-health standby" id="health-lander-dht-hum">STANDBY</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-lander-dht-hum">--</span>
+                  <span class="metric-unit">%</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">ESP32 UPTIME</span>
+                  <span class="metric-health standby" id="health-lander-esp32-uptime">DURATION</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-lander-esp32-uptime">--:--:--</span>
+                  <span class="metric-unit">HH:MM:SS</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">LAST INGESTION</span>
+                  <span class="metric-health standby" id="health-lander-last-ingestion">HOST</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-lander-last-ingestion">--:--:--</span>
+                  <span class="metric-unit">IST</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Card 3: Command Lifecycle Audit Log -->
+          <section class="hud-card full-width-card">
+            <div class="hud-card-header">
+              <h2 class="hud-card-title">COMMAND AUDIT & CORRELATION LIFECYCLE</h2>
+              <span class="hud-tag">ID MAPPING: UUID &#x2194; INT REQ_ID</span>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="hud-table">
+                <thead>
+                  <tr>
+                    <th>Command ID</th>
+                    <th>Action</th>
+                    <th>Status</th>
+                    <th>Req ID</th>
+                    <th>Created (IST)</th>
+                    <th>Ack / Accepted</th>
+                    <th>Outcome / Details</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-lander-commands">
+                  <tr>
+                    <td colspan="7" class="table-empty-row">
+                      Awaiting command events from backend...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Card 4: Recent Telemetry History -->
+          <section class="hud-card">
+            <div class="hud-card-header">
+              <h2 class="hud-card-title">TELEMETRY HISTORY (5-MIN RETENTION)</h2>
+              <span class="hud-tag">SLIDING WINDOW</span>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="hud-table">
+                <thead>
+                  <tr>
+                    <th>Host Timestamp (IST)</th>
+                    <th>Mode</th>
+                    <th>BMP Temp</th>
+                    <th>Pressure</th>
+                    <th>DHT Temp</th>
+                    <th>Humidity</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-lander-telemetry">
+                  <tr>
+                    <td colspan="6" class="table-empty-row">
+                      Awaiting telemetry history from backend...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Card 5: Mission Event Log -->
+          <section class="hud-card">
+            <div class="hud-card-header">
+              <h2 class="hud-card-title">MISSION AUDIT LOG (EVENTS)</h2>
+              <span class="hud-tag">DEDUPLICATED PERSISTED EVENTS</span>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="hud-table">
+                <thead>
+                  <tr>
+                    <th>Timestamp (IST)</th>
+                    <th>Type</th>
+                    <th>Severity</th>
+                    <th>Component</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-lander-events">
+                  <tr>
+                    <td colspan="5" class="table-empty-row">
+                      Awaiting mission events from backend...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Card 6: Lander Session & Diagnostic Controls -->
+          <section class="hud-card full-width-card lander-bottom-controls">
+            <div class="hud-card-header">
+              <h2 class="hud-card-title">LANDER DIAGNOSTIC CONTROLS</h2>
+              <span class="hud-tag" id="lander-control-tag" style="color: var(--amber-400);">COMMAND DISPATCH</span>
+            </div>
+
+            <div class="bottom-controls-grid">
+              <button id="btn-cmd-status" class="btn-control" title="Queries device status snapshot without moving hardware">
+                <span>QUERY STATUS</span>
+                <span class="btn-control-sub">GET_STATUS</span>
+              </button>
+              <button id="btn-cmd-active" class="btn-control btn-success-control" title="Transitions lander to ACTIVE operating mode">
+                <span>SET ACTIVE</span>
+                <span class="btn-control-sub">ENABLE SENSORS</span>
+              </button>
+              <button id="btn-cmd-standby" class="btn-control btn-warning-control" title="Transitions lander to STANDBY operating mode">
+                <span>SET STANDBY</span>
+                <span class="btn-control-sub">PAUSE SENSORS</span>
+              </button>
+              <button id="btn-cmd-reset" class="btn-control btn-danger-preview" title="Exhibition session reset">
+                <span>RESET SESSION</span>
+                <span class="btn-control-sub">CLEAR AUDIT & LOGS</span>
+              </button>
+            </div>
+
+            <div class="control-notice-bar" id="lander-control-notice" style="margin-top: 1rem;">
+              Connecting to Mission Control backend...
+            </div>
+
+            <div id="lander-control-feedback" class="control-feedback-toast" role="alert"></div>
+          </section>
+
+        </main>
+
+        <!-- Subsystem Exhibition Footer -->
+        <footer class="landing-footer">
+          <div class="footer-left">
+            <span>COLLEGE EXHIBITION DIVISION</span>
+            <span>LANDER SUBSYSTEM</span>
+            <span>STANDALONE PREVIEW</span>
+          </div>
+          <div class="footer-right">
+            ESP32 FIRMWARE v1.3.1-BASELINE COMPLIANT
+          </div>
+        </footer>
+
+      </div>
+    </div><!-- /lander-view -->
+
+    <!-- ========================================== -->
+    <!-- STAGE 2B: ROVER DASHBOARD VIEW PANEL        -->
+    <!-- ========================================== -->
+    <div id="rover-view" class="view-panel hidden">
+      <div class="rover-container">
+
+        <header class="rover-navbar">
+          <div class="nav-left">
+            <button id="btn-rover-back-overview" class="btn-nav-back" title="Return to Mission Overview">
+              <span aria-hidden="true">&#x25C0;</span>
+              <span>MISSION OVERVIEW</span>
+            </button>
+            <div class="subsystem-tabs" role="tablist">
+              <button id="btn-tab-rover-to-lander" class="nav-tab" role="tab" aria-selected="false" title="Switch to Lander Dashboard" style="cursor: pointer;">LANDER</button>
+              <button class="nav-tab tab-active rover-tab-active" role="tab" aria-selected="true">ROVER (ACTIVE)</button>
+              <button id="btn-tab-rover-to-drone" class="nav-tab" role="tab" aria-selected="false" title="Switch to Drone Dashboard" style="cursor: pointer;">DRONE</button>
+            </div>
+          </div>
+
+          <div class="nav-right">
+            <div class="status-pill clock-pill" id="rover-clock-display" title="Indian Standard Time (UTC+05:30)">
+              --:--:-- IST
+            </div>
+            <div class="status-pill" id="rover-ws-pill" title="WebSocket Connection State">
+              <span class="pill-dot stale" id="rover-ws-dot"></span>
+              <span id="rover-ws-text">WS: CONNECTING</span>
+            </div>
+            <div class="status-pill" id="rover-conn-pill" title="Rover Connection State">
+              <span class="pill-dot stale" id="rover-conn-dot"></span>
+              <span id="rover-conn-text">ROVER: OFFLINE</span>
+            </div>
+            <div class="status-pill" id="rover-source-pill" title="Telemetry Source">
+              <span id="rover-source-text">SOURCE: UNKNOWN</span>
+            </div>
+          </div>
+        </header>
+
+        <div class="preview-alert-banner" id="rover-alert-banner" style="display: none;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span class="banner-icon" id="rover-banner-icon" aria-hidden="true">&#x26A0;</span>
+            <span id="rover-banner-text"><strong>CONNECTING:</strong> Linking to rover telemetry stream...</span>
+          </div>
+          <span id="rover-banner-tag" style="font-size: 0.85rem; color: var(--slate-400); white-space: nowrap;">SURFACE ROVER (UDP 5005)</span>
+        </div>
+
+        <main class="rover-grid">
+
+          <section class="hud-card">
+            <div class="hud-card-header rover-map-header">
+              <h2 class="hud-card-title rover-map-title">MARS TERRAIN MAP <span class="sector-code">(SECTOR 04&#8209;JC)</span></h2>
+              <span class="hud-tag rover-map-tag" style="color: var(--amber-400);">STATIC ILLUSTRATION &mdash; NOT LIVE POSITIONING</span>
+            </div>
+
+            <div class="terrain-map-container">
+              <span class="map-disclaimer-badge">&#x26A0; STATIC ILLUSTRATION &mdash; NOT LIVE POSITIONING</span>
+              <canvas id="terrain-canvas" class="terrain-canvas"></canvas>
+            </div>
+
+            <div class="map-legend-bar">
+              <div class="legend-item">
+                <span class="legend-dot-lander"></span>
+                <span>STATIONARY LANDER (LZ)</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot-rover"></span>
+                <span>ROVER RECON SECTOR</span>
+              </div>
+              <div class="legend-item" style="color: var(--slate-500);">
+                <span>SCALE: 25m / RANGE RING</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="hud-card">
+            <div class="hud-card-header">
+              <h2 class="hud-card-title">ROVER SCHEMATIC & RADAR</h2>
+              <span class="hud-tag">5 Hz PASSIVE STREAM &bull; PROXIMITY HUD</span>
+            </div>
+
+            <div class="blueprint-wrapper">
+              <svg class="rover-svg-schematic" viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="25" y="15" width="22" height="38" rx="4" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+                <rect x="89" y="15" width="22" height="38" rx="4" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+                <rect x="153" y="15" width="22" height="38" rx="4" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+                <rect x="25" y="107" width="22" height="38" rx="4" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+                <rect x="89" y="107" width="22" height="38" rx="4" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+                <rect x="153" y="107" width="22" height="38" rx="4" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+                <line x1="36" y1="53" x2="100" y2="60" stroke="#64748b" stroke-width="2"/>
+                <line x1="100" y1="60" x2="164" y2="53" stroke="#64748b" stroke-width="2"/>
+                <line x1="36" y1="107" x2="100" y2="100" stroke="#64748b" stroke-width="2"/>
+                <line x1="100" y1="100" x2="164" y2="107" stroke="#64748b" stroke-width="2"/>
+                <rect x="55" y="45" width="90" height="70" rx="8" fill="#0d1424" stroke="#38bdf8" stroke-width="2"/>
+                <rect x="65" y="55" width="70" height="50" rx="4" fill="#1e293b" stroke="#38bdf8" stroke-width="1" stroke-dasharray="3 3"/>
+                <circle cx="130" cy="80" r="8" fill="#38bdf8" fill-opacity="0.3" stroke="#38bdf8" stroke-width="2"/>
+                <circle cx="130" cy="80" r="3" fill="#38bdf8"/>
+                <line x1="100" y1="80" x2="122" y2="80" stroke="#38bdf8" stroke-width="2"/>
+              </svg>
+              <span class="blueprint-decorative-tag">MARS-ROVER-01 &bull; 6-WHEEL ROCKER-BOGIE</span>
+            </div>
+
+            <div class="radar-alert-card">
+              <div class="radar-alert-header">
+                <span>ULTRASONIC PROXIMITY RADAR</span>
+                <span class="radar-status-pill" id="rover-radar-pill">RADAR: STANDBY</span>
+              </div>
+              <div class="radar-distance-bar">
+                <div class="radar-distance-fill" id="rover-radar-fill" style="width: 0%;"></div>
+              </div>
+              <p class="radar-alert-note" id="rover-radar-note">
+                Awaiting rover rangefinder telemetry feed.
+              </p>
+            </div>
+          </section>
+
+          <section class="hud-card full-width-card">
+            <div class="hud-card-header">
+              <h2 class="hud-card-title">ROVER TELEMETRY & ATTITUDE STATUS</h2>
+              <span class="hud-tag">5 Hz PASSIVE SENSOR STREAM CONTRACT</span>
+            </div>
+
+            <div class="rover-telemetry-grid">
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">OBSTACLE DISTANCE</span>
+                  <span class="metric-health standby" id="health-rover-distance">STANDBY</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-rover-distance">--</span>
+                  <span class="metric-unit">cm</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">PITCH / ROLL</span>
+                  <span class="metric-health standby" id="health-rover-attitude">GYRO</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" style="font-size: 1.55rem;" id="val-rover-attitude">-- / --</span>
+                  <span class="metric-unit">&#x00B0;</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">REPORTED CMD</span>
+                  <span class="metric-health standby" id="health-rover-command">PASSIVE</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-rover-command">--</span>
+                  <span class="metric-unit">(F/B/L/R/S)</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">DRIVE MODE</span>
+                  <span class="metric-health standby" id="health-rover-mode">MODE</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-rover-mode">--</span>
+                  <span class="metric-unit">(M/A)</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">BATTERY VOLTAGE</span>
+                  <span class="metric-health standby" id="health-rover-voltage">3S LIPO</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-rover-voltage">--</span>
+                  <span class="metric-unit">V</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">BATTERY CAPACITY</span>
+                  <span class="metric-health standby" id="health-rover-battery" style="color: var(--amber-400);">UNMAPPED</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-rover-battery">--</span>
+                  <span class="metric-unit">%</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="rover-notes-panel">
+              <div class="rover-command-disclaimer">
+                <strong>NOTE:</strong> Reported command is telemetry only; it does not confirm physical movement.
+              </div>
+              <div class="rover-battery-footnote">
+                <strong>BATTERY SPECIFICATION:</strong> Battery percentage unavailable until a validated 3S LiPo mapping is established.
+              </div>
+              <div class="rover-event-banner" id="rover-event-banner">
+                <strong>EVENT STATUS:</strong> Awaiting rover telemetry feed...
+              </div>
+            </div>
+          </section>
+
+        </main>
+
+        <footer class="landing-footer">
+          <div class="footer-left">
+            <span>COLLEGE EXHIBITION DIVISION</span>
+            <span>SURFACE ROVER SUBSYSTEM</span>
+            <span>STANDALONE PREVIEW</span>
+          </div>
+          <div class="footer-right">
+            MARS-ROVER-01 TELEMETRY CONTRACT COMPLIANT
+          </div>
+        </footer>
+
+      </div>
+    </div><!-- /rover-view -->
+
+    <!-- ========================================== -->
+    <!-- STAGE 2C: DRONE DASHBOARD VIEW PANEL        -->
+    <!-- ========================================== -->
+    <div id="drone-view" class="view-panel hidden">
+      <div class="drone-container">
+
+        <header class="drone-navbar">
+          <div class="nav-left">
+            <button id="btn-drone-back-overview" class="btn-nav-back" title="Return to Mission Overview">
+              <span aria-hidden="true">&#x25C0;</span>
+              <span>MISSION OVERVIEW</span>
+            </button>
+            <div class="subsystem-tabs" role="tablist">
+              <button id="btn-tab-drone-to-lander" class="nav-tab" role="tab" aria-selected="false" title="Switch to Lander Dashboard" style="cursor: pointer;">LANDER</button>
+              <button id="btn-tab-drone-to-rover" class="nav-tab" role="tab" aria-selected="false" title="Switch to Rover Dashboard" style="cursor: pointer;">ROVER</button>
+              <button class="nav-tab tab-active drone-tab-active" role="tab" aria-selected="true">DRONE (ACTIVE)</button>
+            </div>
+          </div>
+
+          <div class="nav-right">
+            <div class="status-pill clock-pill" id="drone-clock-display" title="Indian Standard Time (UTC+05:30)">
+              --:--:-- IST
+            </div>
+            <div class="status-pill" id="drone-ws-pill" title="WebSocket Connection State">
+              <span class="pill-dot stale" id="drone-ws-dot"></span>
+              <span id="drone-ws-text">WS: CONNECTING</span>
+            </div>
+            <div class="status-pill" id="drone-conn-pill" title="Drone Connection State">
+              <span class="pill-dot stale" id="drone-conn-dot"></span>
+              <span id="drone-conn-text">DRONE: OFFLINE</span>
+            </div>
+            <div class="status-pill" id="drone-source-pill" title="Telemetry Source">
+              <span id="drone-source-text">SOURCE: UNKNOWN</span>
+            </div>
+          </div>
+        </header>
+
+        <div class="preview-alert-banner" id="drone-alert-banner" style="display: none;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span class="banner-icon" id="drone-banner-icon" aria-hidden="true">&#x26A0;</span>
+            <span id="drone-banner-text"><strong>CONNECTING:</strong> Linking to drone telemetry stream...</span>
+          </div>
+          <span id="drone-banner-tag" style="font-size: 0.85rem; color: var(--slate-400); white-space: nowrap;">AERIAL DRONE (UDP 5007)</span>
+        </div>
+
+        <main class="drone-grid">
+
+          <section class="hud-card">
+            <div class="hud-card-header">
+              <h2 class="hud-card-title">AIRSPACE RADAR (SECTOR 09-JC)</h2>
+              <span class="hud-tag" style="color: var(--amber-400);">HIGH-ALTITUDE RECON &bull; AIRSPACE HUD</span>
+            </div>
+
+            <div class="airspace-map-container">
+              <span class="airspace-disclaimer-badge">&#x26A0; TACTICAL RADAR &mdash; NOT LIVE GPS TRACKING</span>
+              <canvas id="airspace-canvas" class="airspace-canvas"></canvas>
+            </div>
+
+            <div class="airspace-legend-bar">
+              <div class="legend-item">
+                <span class="legend-dot-lander"></span>
+                <span>LANDER LZ</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot-rover"></span>
+                <span>ROVER SECTOR</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot-drone"></span>
+                <span>DRONE CORRIDOR</span>
+              </div>
+              <div class="legend-item" style="color: var(--slate-500);">
+                <span>SWEEP: 50m / ALT RING</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="hud-card">
+            <div class="hud-card-header">
+              <h2 class="hud-card-title">AERIAL DRONE SCHEMATIC & GYRO</h2>
+              <span class="hud-tag">QUAD-ROTOR FRAME &bull; HORIZON HUD</span>
+            </div>
+
+            <div class="drone-blueprint-wrapper">
+              <svg class="drone-svg-schematic" viewBox="0 0 240 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="120" y1="90" x2="45" y2="40" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+                <line x1="120" y1="90" x2="195" y2="40" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+                <line x1="120" y1="90" x2="45" y2="140" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+                <line x1="120" y1="90" x2="195" y2="140" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+
+                <ellipse cx="45" cy="40" rx="32" ry="12" stroke="#fbbf24" stroke-width="1.8" stroke-dasharray="4 3" fill="rgba(251, 191, 36, 0.08)"/>
+                <ellipse cx="195" cy="40" rx="32" ry="12" stroke="#fbbf24" stroke-width="1.8" stroke-dasharray="4 3" fill="rgba(251, 191, 36, 0.08)"/>
+                <ellipse cx="45" cy="140" rx="32" ry="12" stroke="#fbbf24" stroke-width="1.8" stroke-dasharray="4 3" fill="rgba(251, 191, 36, 0.08)"/>
+                <ellipse cx="195" cy="140" rx="32" ry="12" stroke="#fbbf24" stroke-width="1.8" stroke-dasharray="4 3" fill="rgba(251, 191, 36, 0.08)"/>
+
+                <circle cx="45" cy="40" r="5" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/>
+                <circle cx="195" cy="40" r="5" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/>
+                <circle cx="45" cy="140" r="5" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/>
+                <circle cx="195" cy="140" r="5" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/>
+
+                <polygon points="120,52 148,72 148,108 120,128 92,108 92,72" fill="#0b1120" stroke="#fbbf24" stroke-width="2.5"/>
+
+                <rect x="100" y="74" width="40" height="32" rx="3" fill="#1e293b" stroke="#fbbf24" stroke-width="1" stroke-dasharray="2 2"/>
+
+                <circle cx="120" cy="56" r="6" fill="#fbbf24" fill-opacity="0.35" stroke="#fbbf24" stroke-width="2"/>
+                <circle cx="120" cy="56" r="2.5" fill="#ffffff"/>
+
+                <line x1="82" y1="78" x2="68" y2="108" stroke="#64748b" stroke-width="2"/>
+                <line x1="158" y1="78" x2="172" y2="108" stroke="#64748b" stroke-width="2"/>
+                <line x1="62" y1="108" x2="74" y2="108" stroke="#64748b" stroke-width="3" stroke-linecap="round"/>
+                <line x1="166" y1="108" x2="178" y2="108" stroke="#64748b" stroke-width="3" stroke-linecap="round"/>
+              </svg>
+              <span class="drone-blueprint-tag">MARS-DRONE-01 &bull; COAXIAL RECON ROTORCRAFT</span>
+            </div>
+
+            <div class="drone-attitude-card">
+              <div class="drone-attitude-header">
+                <span>FLIGHT ATTITUDE & HORIZON</span>
+                <span class="drone-flight-pill" id="drone-attitude-pill">STANDBY</span>
+              </div>
+
+              <div class="gyro-axes-row">
+                <div class="gyro-axis-item">
+                  <div class="gyro-axis-label">ROLL</div>
+                  <div class="gyro-axis-val" id="val-drone-roll">--&#x00B0;</div>
+                </div>
+                <div class="gyro-axis-item">
+                  <div class="gyro-axis-label">PITCH</div>
+                  <div class="gyro-axis-val" id="val-drone-pitch">--&#x00B0;</div>
+                </div>
+                <div class="gyro-axis-item">
+                  <div class="gyro-axis-label">YAW</div>
+                  <div class="gyro-axis-val" id="val-drone-yaw">--&#x00B0;</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="hud-card full-width-card">
+            <div class="hud-card-header">
+              <h2 class="hud-card-title">DRONE TELEMETRY & ATMOSPHERIC SENSORS</h2>
+              <span class="hud-tag" style="color: var(--amber-400);">UDP 5007 DATAGRAM CONTRACT COMPLIANT</span>
+            </div>
+
+            <div class="drone-telemetry-grid">
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">FLIGHT STATUS</span>
+                  <span class="metric-health standby" id="health-drone-flight-status">STATE</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-drone-flight-status">--</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">ALTITUDE</span>
+                  <span class="metric-health standby" id="health-drone-altitude">BARO/LASER</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-drone-altitude">--</span>
+                  <span class="metric-unit">m</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">GPS LAT / LON</span>
+                  <span class="metric-health standby" id="health-drone-gps">COORDS</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" style="font-size: 1.3rem;" id="val-drone-gps">-- / --</span>
+                  <span class="metric-unit">&#x00B0;</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">BATTERY CAPACITY</span>
+                  <span class="metric-health standby" id="health-drone-battery-pct">LIPO</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-drone-battery-pct">--</span>
+                  <span class="metric-unit">%</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">AIR TEMPERATURE</span>
+                  <span class="metric-health standby" id="health-drone-temp">ENV</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-drone-temp">--</span>
+                  <span class="metric-unit">&#x00B0;C</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">PRESSURE</span>
+                  <span class="metric-health standby" id="health-drone-pressure">BARO</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-drone-pressure">--</span>
+                  <span class="metric-unit">hPa</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">HUMIDITY</span>
+                  <span class="metric-health standby" id="health-drone-humidity">REL</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-drone-humidity">--</span>
+                  <span class="metric-unit">%</span>
+                </div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-header">
+                  <span class="metric-name">BATTERY VOLTAGE</span>
+                  <span class="metric-health standby" id="health-drone-voltage">VOLTS</span>
+                </div>
+                <div class="metric-value-row">
+                  <span class="metric-value" id="val-drone-voltage">--</span>
+                  <span class="metric-unit">V</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="drone-notes-panel">
+              <div class="drone-command-disclaimer">
+                <strong>NOTE:</strong> Flight telemetry only; drone flight commands are autonomous or pilot-link; no propulsion commands are dispatched from Mission Control.
+              </div>
+              <div class="drone-event-banner" id="drone-event-banner">
+                <strong>EVENT STATUS:</strong> Awaiting drone telemetry feed (UDP port 5007)...
+              </div>
+            </div>
+          </section>
+
+        </main>
+
+        <footer class="landing-footer">
+          <div class="footer-left">
+            <span>COLLEGE EXHIBITION DIVISION</span>
+            <span>AERIAL DRONE SUBSYSTEM</span>
+            <span id="drone-footer-source">TELEMETRY STREAM</span>
+          </div>
+          <div class="footer-right">
+            MARS-DRONE-01 TELEMETRY CONTRACT (UDP 5007) COMPLIANT
+          </div>
+        </footer>
+
+      </div>
+    </div><!-- /drone-view -->
+
+    <!-- Subsystem Selector Modal -->
+    <div id="subsystem-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3 id="modal-title" class="modal-title">Subsystem Selected</h3>
+          <button id="modal-close-btn" class="modal-close" aria-label="Close modal">&times;</button>
+        </div>
+        <p id="modal-body" class="modal-body"></p>
+        <div id="modal-notice" class="modal-notice"></div>
+        <div class="modal-actions">
+          <button id="modal-dismiss-btn" class="modal-btn modal-btn-primary">ACKNOWLEDGE</button>
+        </div>
       </div>
     </div>
 
-    <div class="status-badges">
-      <div id="clock-display" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--color-cyan); padding: 0.35rem 0.6rem; background: var(--bg-primary); border-radius: 4px; border: 1px solid var(--border-color);">
-        --:--:-- IST
-      </div>
-
-      <div id="ws-status-badge" class="badge state-not-connected">
-        <span class="badge-dot"></span>
-        <span class="badge-text">WS: CONNECTING</span>
-      </div>
-
-      <div id="gw-status-badge" class="badge state-not-connected">
-        <span class="badge-dot"></span>
-        <span class="badge-text">GATEWAY: UNKNOWN</span>
-      </div>
-
-      <div id="device-status-badge" class="badge state-not-connected">
-        <span class="badge-dot"></span>
-        <span class="badge-text">LANDER: UNKNOWN</span>
-      </div>
-
-      <div id="drone-status-badge" class="badge state-not-connected">
-        <span class="badge-dot"></span>
-        <span class="badge-text">DRONE: UNKNOWN</span>
-      </div>
-
-      <div id="mode-badge" class="badge state-not-connected">
-        <span class="badge-dot"></span>
-        <span class="badge-text">MODE: --</span>
-      </div>
-    </div>
-  </header>
-
-  <!-- Offline / System Warning Banner -->
-  <div id="offline-banner" class="offline-banner hidden">
-    ⚠ CONNECTION DISRUPTED: RECONNECTING TO MISSION BACKEND... TELEMETRY STREAM MAY BE STALE.
   </div>
 
-  <!-- Main Dashboard Grid Layout -->
-  <main class="dashboard-grid">
-
-    <!-- Lander operating mode and non-actuating status query -->
-    <section class="card lander-status-card">
-      <div class="card-header">
-        <h2 class="card-title">LANDER SYSTEM STATUS</h2>
-        <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">ESP32</span>
-      </div>
-      <div id="lander-mode-display" class="lander-mode-indicator">UNKNOWN</div>
-      <div class="control-notice">Lander operating mode and sensor status.</div>
-
-      <div class="controls-grid">
-        <button id="btn-get-status" class="btn btn-secondary">
-          QUERY STATUS
-        </button>
-        <button id="btn-set-active" class="btn btn-primary">SET ACTIVE</button>
-        <button id="btn-set-standby" class="btn btn-mode-secondary">SET STANDBY</button>
-        <button id="btn-reset-session" class="btn btn-danger">
-          RESET SESSION
-        </button>
-      </div>
-
-      <div id="control-status-notice" class="control-notice">
-        Verifying safety interlocks and hardware telemetry...
-      </div>
-    </section>
-
-    <!-- Card 2: Environmental Telemetry & Sensor Health -->
-    <section class="card">
-      <div class="card-header">
-        <h2 class="card-title">LANDER SENSOR TELEMETRY</h2>
-        <span id="telemetry-live-indicator" class="historical-indicator">
-          INITIALIZING...
-        </span>
-      </div>
-
-      <div class="sensors-grid">
-        <div class="metric-box">
-          <div class="metric-header">
-            <span class="metric-name">BMP280 TEMP</span>
-            <span id="health-bmp-temp" class="metric-health failed">N/A</span>
-          </div>
-          <div class="metric-value">
-            <span id="val-bmp-temp">--</span>
-            <span class="metric-unit">°C</span>
-          </div>
-        </div>
-
-        <div class="metric-box">
-          <div class="metric-header">
-            <span class="metric-name">BMP280 PRESSURE</span>
-            <span id="health-bmp-press" class="metric-health failed">N/A</span>
-          </div>
-          <div class="metric-value">
-            <span id="val-bmp-press">--</span>
-            <span class="metric-unit">hPa</span>
-          </div>
-        </div>
-
-        <div class="metric-box">
-          <div class="metric-header">
-            <span class="metric-name">DHT11 TEMP</span>
-            <span id="health-dht-temp" class="metric-health failed">N/A</span>
-          </div>
-          <div class="metric-value">
-            <span id="val-dht-temp">--</span>
-            <span class="metric-unit">°C</span>
-          </div>
-        </div>
-
-        <div class="metric-box">
-          <div class="metric-header">
-            <span class="metric-name">DHT11 HUMIDITY</span>
-            <span id="health-dht-hum" class="metric-health failed">N/A</span>
-          </div>
-          <div class="metric-value">
-            <span id="val-dht-hum">--</span>
-            <span class="metric-unit">%</span>
-          </div>
-        </div>
-
-        <div class="metric-box">
-          <div class="metric-header">
-            <span class="metric-name">ESP32 UPTIME</span>
-            <span class="metric-health ok">BOOT</span>
-          </div>
-          <div class="metric-value">
-            <span id="val-esp32-uptime">--</span>
-            <span class="metric-unit">HH:MM:SS</span>
-          </div>
-        </div>
-
-        <div class="metric-box">
-          <div class="metric-header">
-            <span class="metric-name">LAST INGESTION</span>
-            <span class="metric-health ok">HOST</span>
-          </div>
-          <div class="metric-value">
-            <span id="val-last-received" style="font-size: 1.1rem;">--</span>
-            <span class="metric-unit">IST</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Independent rover telemetry panel; this device never shares the lander command path. -->
-    <section class="card rover-card" aria-labelledby="rover-panel-title">
-      <div class="card-header">
-        <h2 id="rover-panel-title" class="card-title">MARS ROVER TELEMETRY</h2>
-        <span id="rover-source" class="rover-source">SIMULATED</span>
-      </div>
-      <div class="rover-status-row">
-        <span id="rover-connection" class="rover-connection offline">OFFLINE</span>
-        <span id="rover-last-seen" class="rover-last-seen">NO VALID PACKETS</span>
-      </div>
-      <p class="rover-note">Reported command is telemetry only; it does not confirm physical movement.</p>
-      <div class="rover-metrics">
-        <div class="metric-box"><span class="metric-name">OBSTACLE DISTANCE</span><div class="metric-value"><span id="rover-distance">--</span><span class="metric-unit">cm</span></div></div>
-        <div class="metric-box"><span class="metric-name">PITCH / ROLL</span><div class="metric-value"><span id="rover-attitude">-- / --</span><span class="metric-unit">°</span></div></div>
-        <div class="metric-box"><span class="metric-name">REPORTED CMD</span><div class="metric-value"><span id="rover-command">--</span></div></div>
-        <div class="metric-box"><span class="metric-name">DRIVE MODE</span><div class="metric-value"><span id="rover-mode">--</span></div></div>
-      </div>
-      <div id="rover-event" class="rover-event">Waiting for rover telemetry.</div>
-    </section>
-
-    <!-- Independent drone telemetry panel; this device communicates via UDP 5007 to the Pi gateway. -->
-    <section class="card drone-card" aria-labelledby="drone-panel-title">
-      <div class="card-header">
-        <h2 id="drone-panel-title" class="card-title">MARS DRONE TELEMETRY</h2>
-        <span id="drone-source" class="drone-source">SIMULATED</span>
-      </div>
-      <div class="drone-status-row">
-        <span id="drone-connection" class="drone-connection offline">OFFLINE</span>
-        <span id="drone-last-seen" class="drone-last-seen">NO VALID PACKETS</span>
-      </div>
-      <p class="drone-note">Flight telemetry only; drone commands are not dispatched from Mission Control.</p>
-      <div class="drone-metrics">
-        <div class="metric-box"><span class="metric-name">FLIGHT STATUS</span><div class="metric-value"><span id="drone-flight-status">--</span></div></div>
-        <div class="metric-box"><span class="metric-name">ALTITUDE</span><div class="metric-value"><span id="drone-altitude">--</span><span class="metric-unit">m</span></div></div>
-        <div class="metric-box"><span class="metric-name">GPS LAT / LON</span><div class="metric-value"><span id="drone-gps">-- / --</span><span class="metric-unit">°</span></div></div>
-        <div class="metric-box"><span class="metric-name">BATTERY</span><div class="metric-value"><span id="drone-battery">--</span><span class="metric-unit">%</span></div></div>
-        <div class="metric-box"><span class="metric-name">ORIENTATION</span><div class="metric-value"><span id="drone-orientation">-- / -- / --</span><span class="metric-unit">°</span></div></div>
-        <div class="metric-box"><span class="metric-name">ENVIRONMENT</span><div class="metric-value"><span id="drone-environment">--°C / --hPa / --%</span></div></div>
-      </div>
-      <div id="drone-event" class="drone-event">Waiting for drone telemetry.</div>
-    </section>
-
-    <!-- Card 3: Command Lifecycle Audit Log -->
-    <section class="card" style="grid-column: 1 / -1;">
-      <div class="card-header">
-        <h2 class="card-title">COMMAND AUDIT & CORRELATION LIFECYCLE</h2>
-        <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">
-          ID MAPPING: UUID ↔ INT REQ_ID • UNCERTAINTY ISOLATION
-        </span>
-      </div>
-
-      <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Command ID</th>
-              <th>Action</th>
-              <th>Status</th>
-              <th>Req ID</th>
-              <th>Created</th>
-              <th>Ack / Accepted</th>
-              <th>Outcome</th>
-            </tr>
-          </thead>
-          <tbody id="commands-audit-tbody">
-            <tr>
-              <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">
-                No commands recorded in this session.
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Card 4: Recent Telemetry History (5-Minute Window) -->
-    <section class="card">
-      <div class="card-header">
-        <h2 class="card-title">TELEMETRY HISTORY (5-MIN RETENTION)</h2>
-        <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">
-          SLIDING WINDOW
-        </span>
-      </div>
-
-      <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Host Timestamp</th>
-              <th>Gate</th>
-              <th>BMP Temp</th>
-              <th>Pressure</th>
-              <th>DHT Temp</th>
-              <th>Humidity</th>
-            </tr>
-          </thead>
-          <tbody id="telemetry-history-tbody">
-            <tr>
-              <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">
-                Awaiting telemetry samples...
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Card 5: Mission Event Log -->
-    <section class="card">
-      <div class="card-header">
-        <h2 class="card-title">MISSION AUDIT LOG (EVENTS)</h2>
-        <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">
-          DEDUPLICATED PERSISTED EVENTS
-        </span>
-      </div>
-
-      <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Timestamp</th>
-              <th>Type</th>
-              <th>Severity</th>
-              <th>Component</th>
-              <th>Description</th>
-            </tr>
-          </thead>
-          <tbody id="events-log-tbody">
-            <tr>
-              <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">
-                No mission events recorded.
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- Modal: Session Reset Confirmation -->
-  <div id="modal-reset-session" class="modal-overlay hidden">
-    <div class="modal-card">
-      <h3>CONFIRM MISSION SESSION RESET</h3>
-      <p>
-        Resetting the session clears SQLite history (telemetry, commands, events) and reverts mission state to UNKNOWN.
-        Physical hardware state is NOT altered.
-      </p>
-      <div class="modal-actions">
-        <button id="modal-btn-cancel" class="btn btn-secondary">CANCEL</button>
-        <button id="modal-btn-confirm" class="btn btn-danger">CONFIRM RESET</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="/static/js/dashboard.js?v=1.3.4"></script>
+  <!-- JavaScript Modules -->
+  <script src="/static/js/formatters.js"></script>
+  <script src="/static/js/lander-view.js"></script>
+  <script src="/static/js/rover-view.js"></script>
+  <script src="/static/js/drone-view.js"></script>
+  <script src="/static/js/landing.js"></script>
+  <script src="/static/js/mission-client.js"></script>
 </body>
 </html>

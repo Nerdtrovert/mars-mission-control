@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 import json
 import pytest
 
@@ -11,12 +10,11 @@ from app.communication.gateway_contract import (
     CommandName,
     CommandRequest,
     ConnectionState,
-    OperatingMode,
 )
 from gateway.config import GatewayConfig
-from gateway.drone_udp import DroneUDPProtocol, DroneUDPReceiver, parse_drone_datagram
+from gateway.drone_udp import parse_drone_datagram
 from gateway.lander_manager import LanderManager
-from gateway.rover_udp import RoverUDPProtocol, RoverUDPReceiver, parse_rover_datagram
+from gateway.rover_udp import parse_rover_datagram
 from gateway.tcp_transport import LanderTCPTransport
 
 

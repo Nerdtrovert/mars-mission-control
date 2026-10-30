@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import math
-from typing import Any
 
 from app.communication.gateway_contract import (
     CommandName, CommandRequest, CommandResponse, ConnectionState, DeviceInfo,

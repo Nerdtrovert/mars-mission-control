@@ -1,13 +1,11 @@
 """Tests for Raspberry Pi Drone UDP receiver and integration."""
 
-import asyncio
 import json
 import pytest
 
 from gateway.config import GatewayConfig
 from gateway.drone_udp import (
     DroneUDPProtocol,
-    DroneUDPReceiver,
     is_newer_sequence,
     parse_drone_datagram,
 )

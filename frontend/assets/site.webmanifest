@@ -1,0 +1,32 @@
+{
+  "name": "Mars Mission Control",
+  "short_name": "MMC",
+  "description": "Aerospace Exhibition Mars Mission Control Surface & Reconnaissance Dashboard",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#070302",
+  "theme_color": "#c04128",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/static/assets/favicon-16.png",
+      "sizes": "16x16",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/assets/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/assets/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "screenshots": []
+}

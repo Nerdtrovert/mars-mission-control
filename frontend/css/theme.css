@@ -1,0 +1,261 @@
+/**
+ * Mars Mission Control — Aerospace Design Tokens & Global Theme
+ * frontend/css/theme.css
+ */
+
+:root {
+  /* Color Palette: Deep Space & Mars Atmosphere */
+  --bg-space: #070302;
+  --bg-surface: rgba(10, 14, 23, 0.65);
+  --bg-card: rgba(15, 23, 42, 0.45);
+  --bg-card-hover: rgba(22, 33, 62, 0.65);
+  --bg-card-border: rgba(255, 255, 255, 0.22);
+
+  /* Martian Palette */
+  --mars-rust: #c04128;
+  --mars-core: #e05638;
+  --mars-glow: rgba(224, 86, 56, 0.35);
+  --mars-dust: rgba(192, 65, 40, 0.12);
+
+  /* Aerospace Telemetry Signals */
+  --cyan-400: #38bdf8;
+  --cyan-glow: rgba(56, 189, 248, 0.35);
+  --green-400: #34d399;
+  --green-glow: rgba(52, 211, 153, 0.35);
+  --amber-400: #fbbf24;
+  --amber-glow: rgba(251, 191, 36, 0.35);
+  --red-400: #f87171;
+  --red-glow: rgba(248, 113, 113, 0.35);
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-800: #1e293b;
+
+  /* Typography */
+  --font-sans: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, 'Courier New', monospace;
+
+  /* Glassmorphism & Borders */
+  --border-subtle: rgba(255, 255, 255, 0.18);
+  --border-accent: rgba(56, 189, 248, 0.35);
+  --border-mars: rgba(224, 86, 56, 0.45);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* Shadows & Translucent Elevation */
+  --glass-backdrop: blur(14px);
+  --shadow-hud: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 0 0 1px var(--border-subtle);
+  --shadow-card-hover: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 24px rgba(255, 255, 255, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+/* CSS Reset & Defaults */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-space);
+  color: #f1f5f9;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.4);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cyan-400);
+}
+
+/* --- Shared Navbar Status Pills --- */
+.status-pill {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-full);
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--slate-300);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  flex-shrink: 0; /* Prevent pills from shrinking below content */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Responsive status pills */
+@media (max-width: 768px) {
+  .status-pill {
+    font-size: 0.75rem;
+    padding: 0.35rem 0.65rem;
+  }
+}
+
+.pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+  flex-shrink: 0;
+}
+
+.clock-pill {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* --- Shared Subsystem Exhibition Footers --- */
+.landing-footer {
+  margin-top: 1rem;
+  padding: 1.15rem 1.75rem;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  color: var(--slate-400);
+  letter-spacing: 0.06em;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.footer-left span:not(:last-child)::after {
+  content: "•";
+  margin-left: 1.25rem;
+  color: var(--slate-600);
+}
+
+.footer-right {
+  font-weight: 600;
+  color: var(--slate-300);
+}
+
+/* --- Dynamic Status & Pill Highlights --- */
+.pill-dot.online {
+  background: var(--green-400) !important;
+  color: var(--green-400) !important;
+}
+
+.pill-dot.offline {
+  background: var(--red-400) !important;
+  color: var(--red-400) !important;
+}
+
+.pill-dot.stale,
+.pill-dot.standalone {
+  background: var(--amber-400) !important;
+  color: var(--amber-400) !important;
+}
+
+.metric-health.ok {
+  color: var(--green-400);
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.metric-health.failed {
+  color: var(--red-400);
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.preview-alert-banner.banner-disrupted {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(15, 23, 42, 0.75) 100%) !important;
+  border-color: rgba(239, 68, 68, 0.65) !important;
+  color: #fca5a5 !important;
+}
+
+.preview-alert-banner.banner-nominal {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.14) 0%, rgba(15, 23, 42, 0.65) 100%) !important;
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  color: var(--green-400) !important;
+}
+
+.btn-control:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn-success-control:hover {
+  border-color: var(--green-400) !important;
+  box-shadow: 0 0 20px var(--green-glow) !important;
+}
+
+.btn-warning-control:hover {
+  border-color: var(--amber-400) !important;
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.35) !important;
+}
+
+/* Badge tags for table items */
+.badge-status {
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  display: inline-block;
+  font-family: var(--font-mono);
+}
+
+.badge-status-completed,
+.badge-status-acknowledged,
+.badge-status-ok {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--green-400);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.badge-status-rejected,
+.badge-status-failed,
+.badge-status-error {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--red-400);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.badge-status-created,
+.badge-status-sent,
+.badge-status-pending,
+.badge-status-warn {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--amber-400);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+

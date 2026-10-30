@@ -1,0 +1,909 @@
+/**
+ * Mars Mission Control — Cinematic Mars Landing Screen
+ * frontend/css/landing.css
+ *
+ * Enhanced design with:
+ * - Mars planetary background
+ * - Mission header with logo, title, system status, operating mode
+ * - Hero section with animated mission emblem
+ * - Three glassmorphism subsystem cards
+ * - Mission network status footer
+ * - Cinematic dark space theme with Mars orange/red accents
+ */
+
+.landing-viewport {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+  background-color: #070302;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Mars Surface Background (Image 1) --- */
+.mars-bg-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url('../assets/mars-surface.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Subtle overlay for readability while keeping Mars landscape visible */
+.mars-bg-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    radial-gradient(ellipse at center, rgba(7, 3, 2, 0.3) 0%, rgba(7, 3, 2, 0.6) 50%, rgba(7, 3, 2, 0.85) 100%),
+    linear-gradient(180deg, rgba(192, 65, 40, 0.08) 0%, transparent 40%, transparent 60%, rgba(192, 65, 40, 0.05) 100%);
+}
+
+/* Subtle atmospheric glow at horizon */
+.mars-bg-overlay::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(0deg, rgba(224, 86, 56, 0.12) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* --- Landing View Panel --- */
+#landing-view {
+  position: relative;
+  z-index: 10;
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  min-height: 100vh;
+}
+
+/* ============================================
+   HEADER: Mission Identity & System Status
+   ============================================ */
+.mission-header {
+  position: relative;
+  z-index: 20;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto 1.5rem;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+
+  background: rgba(10, 14, 23, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.mars-logo {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 12px rgba(224, 86, 56, 0.4));
+}
+
+.mars-logo svg {
+  width: 100%;
+  height: 100%;
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.mission-title {
+  font-family: var(--font-sans);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffffff;
+  line-height: 1.2;
+  text-shadow: 0 0 20px rgba(224, 86, 56, 0.3);
+}
+
+.mission-subtitle {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--slate-400);
+  opacity: 0.85;
+}
+
+.header-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.system-status {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.85rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--slate-300);
+  transition: all 0.3s ease;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.status-dot.initializing {
+  background: var(--amber-400);
+  color: var(--amber-400);
+  animation: pulse-amber 2s ease-in-out infinite;
+}
+
+.status-dot.online {
+  background: var(--green-400);
+  color: var(--green-400);
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+.status-dot.offline {
+  background: var(--red-400);
+  color: var(--red-400);
+}
+
+@keyframes pulse-amber {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--amber-400); }
+  50% { opacity: 0.5; box-shadow: 0 0 16px var(--amber-400); }
+}
+
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--green-400); }
+  50% { opacity: 0.6; box-shadow: 0 0 16px var(--green-400); }
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.mode-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  padding: 0.5rem 1rem;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-mars);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.mode-label {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--slate-500);
+}
+
+.mode-value {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--amber-400);
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+}
+
+/* ============================================
+   HERO SECTION: Mission Emblem
+   ============================================ */
+.hero-section {
+  position: relative;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+  padding: 1rem;
+}
+
+.hero-emblem {
+  width: 180px;
+  height: 180px;
+  filter: drop-shadow(0 0 40px rgba(224, 86, 56, 0.3));
+  animation: emblem-float 6s ease-in-out infinite;
+}
+
+@keyframes emblem-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-4px) rotate(0.5deg); }
+  50% { transform: translateY(0) rotate(0deg); }
+  75% { transform: translateY(4px) rotate(-0.5deg); }
+}
+
+.hero-emblem svg {
+  width: 100%;
+  height: 100%;
+}
+
+.hero-text {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.hero-heading {
+  font-family: var(--font-sans);
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffffff;
+  line-height: 1.15;
+  text-shadow:
+    0 0 30px rgba(224, 86, 56, 0.4),
+    0 2px 16px rgba(0, 0, 0, 0.5);
+}
+
+.hero-tagline {
+  font-family: var(--font-mono);
+  font-size: clamp(0.7rem, 1.5vw, 0.85rem);
+  font-weight: 500;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--slate-300);
+  opacity: 0.8;
+}
+
+/* ============================================
+   SUBSYSTEM CARDS GRID
+   ============================================ */
+.translucent-nav-grid {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto 2rem;
+  flex-wrap: wrap;
+}
+
+/* The Translucent Glass Card */
+.translucent-card {
+  position: relative;
+  flex: 1 1 260px;
+  max-width: 300px;
+  min-height: 240px;
+  padding: 2.5rem 1.75rem 2rem 1.75rem;
+
+  /* Translucent frosted glass styling */
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+
+  /* Layout */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  user-select: none;
+  overflow: hidden;
+}
+
+/* Subtle Mars glow accent line at top of card */
+.translucent-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(224, 86, 56, 0.4), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.translucent-card:hover {
+  background: rgba(22, 33, 62, 0.55);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.55),
+    0 0 32px rgba(224, 86, 56, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  transform: translateY(-6px);
+}
+
+.translucent-card:hover::before {
+  opacity: 1;
+}
+
+.translucent-card:active {
+  transform: translateY(-2px);
+  transition-duration: 0.1s;
+}
+
+.translucent-card:focus-visible {
+  outline: none;
+  border-color: var(--cyan-400);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.55),
+    0 0 0 2px var(--cyan-400),
+    0 0 32px rgba(56, 189, 248, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Card Line Icon */
+.card-icon-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  margin-bottom: 1.5rem;
+  transition: transform 0.3s ease, filter 0.3s ease;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.2));
+}
+
+.card-line-icon {
+  width: 64px;
+  height: 64px;
+  stroke: #ffffff;
+  stroke-width: 1.6;
+}
+
+.translucent-card:hover .card-icon-area {
+  transform: scale(1.08);
+  filter: drop-shadow(0 0 16px rgba(224, 86, 56, 0.6));
+}
+
+/* Card Label */
+.card-label {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-align: center;
+  margin-bottom: 0.75rem;
+  white-space: nowrap;
+  text-shadow: 0 0 16px rgba(224, 86, 56, 0.2);
+}
+
+/* Card Live Status Indicator */
+.card-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--slate-300);
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  padding: 0.25rem 0.7rem;
+  margin-bottom: 1rem;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.3s ease;
+}
+
+.translucent-card:hover .card-status-indicator {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+/* Arrow */
+.card-arrow-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  opacity: 0.7;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.card-arrow-icon {
+  width: 24px;
+  height: 24px;
+  stroke: #ffffff;
+  stroke-width: 1.8;
+}
+
+.translucent-card:hover .card-arrow-wrap {
+  opacity: 1;
+  transform: translateX(6px);
+}
+
+/* ============================================
+   FOOTER: Mission Network Status
+   ============================================ */
+.mission-footer {
+  position: relative;
+  z-index: 20;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0.85rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+
+  background: rgba(10, 14, 23, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--slate-400);
+}
+
+.footer-left,
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.footer-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--slate-500);
+  white-space: nowrap;
+}
+
+.footer-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.footer-status .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.footer-status .status-dot.online {
+  background: var(--green-400);
+  color: var(--green-400);
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+.footer-status .status-dot.offline {
+  background: var(--red-400);
+  color: var(--red-400);
+}
+
+.footer-status .status-dot.connecting {
+  background: var(--amber-400);
+  color: var(--amber-400);
+  animation: pulse-amber 1.5s ease-in-out infinite;
+}
+
+.footer-value {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--slate-300);
+  white-space: nowrap;
+}
+
+.clock-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.footer-divider {
+  color: var(--slate-700);
+  opacity: 0.5;
+}
+
+/* ============================================
+   MODAL STYLES (Existing)
+   ============================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+
+.modal-overlay.hidden {
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal-box {
+  width: 90%;
+  max-width: 520px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
+  padding: 2.25rem;
+  position: relative;
+  animation: modalPop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPop {
+  0% { transform: scale(0.92); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #ffffff;
+  font-family: var(--font-sans);
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--slate-400);
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0.25rem;
+  transition: color 0.2s;
+}
+
+.modal-close:hover {
+  color: #ffffff;
+}
+
+.modal-body {
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: var(--slate-300);
+  margin-bottom: 1.5rem;
+}
+
+.modal-notice {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: rgba(251, 191, 36, 0.12);
+  border-left: 3px solid var(--amber-400);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--amber-400);
+  margin-top: 1rem;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.modal-btn {
+  padding: 0.7rem 1.4rem;
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.modal-btn-primary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.modal-btn-primary:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+@media (max-width: 1024px) {
+  .mission-header {
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0.85rem 1.25rem;
+  }
+
+  .header-left {
+    order: 1;
+    width: 100%;
+  }
+
+  .header-center {
+    order: 2;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .header-right {
+    order: 3;
+  }
+
+  .hero-emblem {
+    width: 150px;
+    height: 150px;
+  }
+
+  .translucent-nav-grid {
+    gap: 1.25rem;
+    max-width: 100%;
+  }
+
+  .translucent-card {
+    flex: 1 1 calc(50% - 0.625rem);
+    min-height: 220px;
+    max-width: none;
+    padding: 2rem 1.5rem 1.5rem 1.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  #landing-view {
+    padding: 1rem;
+  }
+
+  .mission-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .mars-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .mission-title {
+    font-size: 1rem;
+  }
+
+  .mission-subtitle {
+    font-size: 0.55rem;
+  }
+
+  .mode-indicator {
+    padding: 0.4rem 0.75rem;
+  }
+
+  .mode-label {
+    font-size: 0.5rem;
+  }
+
+  .mode-value {
+    font-size: 0.65rem;
+  }
+
+  .status-indicator {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.62rem;
+  }
+
+  .hero-section {
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .hero-emblem {
+    width: 130px;
+    height: 130px;
+  }
+
+  .hero-heading {
+    font-size: 1.35rem;
+  }
+
+  .hero-tagline {
+    font-size: 0.6rem;
+  }
+
+  .translucent-nav-grid {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .translucent-card {
+    width: 100%;
+    max-width: 360px;
+    min-height: 200px;
+    padding: 1.75rem 1.5rem 1.5rem 1.5rem;
+  }
+
+  .card-line-icon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .mission-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.65rem;
+  }
+
+  .footer-left,
+  .footer-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .footer-left {
+    gap: 1rem;
+  }
+
+  .footer-right {
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .mission-header {
+    padding: 0.6rem 0.85rem;
+  }
+
+  .header-left {
+    gap: 0.75rem;
+  }
+
+  .mars-logo {
+    width: 36px;
+    height: 36px;
+  }
+
+  .hero-emblem {
+    width: 110px;
+    height: 110px;
+  }
+
+  .hero-heading {
+    font-size: 1.15rem;
+  }
+
+  .translucent-card {
+    padding: 1.5rem 1.25rem 1.25rem 1.25rem;
+    min-height: 180px;
+  }
+
+  .mission-footer {
+    padding: 0.6rem 0.85rem;
+    font-size: 0.6rem;
+  }
+
+  .modal-box {
+    padding: 1.5rem;
+    margin: 1rem;
+  }
+}
+
+/* ============================================
+   REDUCED MOTION
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  .hero-emblem,
+  .translucent-card,
+  .card-icon-area,
+  .card-arrow-wrap,
+  .status-dot.initializing,
+  .status-dot.online,
+  .footer-status .status-dot {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .translucent-card:hover {
+    transform: none;
+  }
+
+  .translucent-card:hover .card-icon-area {
+    transform: none;
+  }
+
+  .translucent-card:hover .card-arrow-wrap {
+    transform: none;
+  }
+}

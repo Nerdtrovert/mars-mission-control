@@ -11,7 +11,7 @@ recent device messages. A Pi process health response alone does not mark the
 lander online.
 
 Configure the ESP32 by copying
-Lander/lander/lander_config.example.h to lander_config.h and setting the local
+lander/lander_config.example.h to lander_config.h and setting the local
 Wi-Fi SSID/password plus the Pi's LAN address. Keep this real config local;
 the filename is git-ignored. Join both devices to the same private network.
 The ESP32 retries Wi-Fi and TCP connections without stopping local sensor,

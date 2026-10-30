@@ -13,8 +13,8 @@ Mars Mission Control is a **local-first college exhibition project** demonstrati
 ### System Components
 1. **ESP32 Lander Controller**: Embedded microcontroller managing environmental sensing, display, status indicators, and operating mode.
 2. **Raspberry Pi 4 Hardware Gateway**: Owns the lander Wi-Fi TCP receiver (port 5006) and rover UDP ingestion (port 5005); hosts HTTP and WebSocket APIs.
-3. **MacBook Mission Control**: Central host running the FastAPI backend, mission coordination, SQLite history, and dashboard.
-4. **Exhibition Dashboard TV**: Display connected directly to the MacBook over HDMI showing real-time telemetry and system status.
+3. **Development Machine (Mission Control Backend)**: Central host running the FastAPI backend, mission coordination, SQLite history, and dashboard.
+4. **Exhibition Dashboard TV**: Display connected directly to the development machine over HDMI showing real-time telemetry and system status.
 5. **Rover ESP32 and Windows GUI**: HC-12 telemetry at 9600 baud reaches a Windows Tkinter GUI, which forwards readings to the Pi over UDP port 5005. The GUI owns the COM port.
 6. **Drone ESP32**: Intended local-network telemetry source; interface details and implementation are not yet defined.
 
@@ -36,8 +36,8 @@ When making trade-offs, strictly apply the following priorities in order:
 
 ```
  +------------------+   Local Wi-Fi  +-----------------------+   Private Local Wi-Fi   +-----------------------+   HDMI   +--------------------+
- |   ESP32 Lander   | <============> | Raspberry Pi 4 Gateway| <=====================> |    MacBook Backend    | <======> |   Exhibition TV    |
- | (Sensor Firmware)|   (TCP 5006)   |  (TCP + UDP + API)    |     (HTTP / WS JSON)    | & Browser Dashboard   |  Video   |     Dashboard      |
+ |   ESP32 Lander   | <============> | Raspberry Pi 4 Gateway| <=====================> |  Development Machine  | <======> |   Exhibition TV    |
+ | (Sensor Firmware)|   (TCP 5006)   |  (TCP + UDP + API)    |     (HTTP / WS JSON)    |   Backend & Dashboard |  Video   |     Dashboard      |
  +------------------+                +-----------------------+                         +-----------------------+          +--------------------+
 ```
 
@@ -48,18 +48,18 @@ Drone ESP32 --local network telemetry--> interface and schema not yet defined
 - **ESP32 Lander**:
   - **Owns**: BMP280/DHT11 sensor polling, display, status LEDs, operating mode, and lander hardware state.
   - **Transport**: Communicates with the Raspberry Pi exclusively over private local Wi-Fi TCP (port 5006) using newline-delimited JSON. USB serial is retained strictly for local programming and development debugging.
-  - **Autonomy**: Must function safely regardless of whether the Pi or MacBook backend is connected.
+  - **Autonomy**: Must function safely regardless of whether the Pi or development machine backend is connected.
   - **Reference**: `v1.3.1-esp32-baseline` is the historical firmware reference. Changes require explicit task authorization and must preserve supported message framing and remaining hardware behavior.
 - **Raspberry Pi 4 (Hardware Gateway)**:
   - **Owns**: The Wi-Fi TCP server socket (port 5006) for the lander and the UDP listener (port 5005) for the rover.
-  - **Responsibilities**: Manages Wi-Fi TCP client connections, handles newline framing, buffers telemetry, validates incoming HTTP commands, and relays messages between the devices and the MacBook over HTTP and WebSocket.
+  - **Responsibilities**: Manages Wi-Fi TCP client connections, handles newline framing, buffers telemetry, validates incoming HTTP commands, and relays messages between the devices and the development machine over HTTP and WebSocket.
   - **Isolation**: Prevents multiple processes or network clients from contending for device network sockets.
   - **Rover**: Runs the independent UDP listener on port 5005 in the same application lifecycle; it does not open the Windows COM port or send rover commands.
-- **MacBook (Mission Control Backend & Dashboard)**:
+- **Development Machine (Mission Control Backend & Dashboard)**:
   - **Owns**: High-level mission state coordination, command tracking and dispatch, SQLite mission logging and telemetry archiving, and dashboard client serving.
   - **Constraint**: Communicates exclusively with the Raspberry Pi Gateway over local HTTP/WebSocket. Never attempts direct hardware connection to the ESP32 in production.
 - **Exhibition TV**:
-  - Passive video sink connected via HDMI to the MacBook. Does not participate in device network protocols.
+  - Passive video sink connected via HDMI to the development machine. Does not participate in device network protocols.
 
 Do not shift responsibilities across these boundaries without explicit explanation, justification, and approval.
 
@@ -67,7 +67,7 @@ Do not shift responsibilities across these boundaries without explicit explanati
 
 ## 3. Existing Implementation & Preservation Rules
 
-### Current MacBook Backend Baseline
+### Current Development Machine Backend Baseline
 The repository already contains a working FastAPI application structure:
 - `backend/app/main.py`: FastAPI application entrypoint.
 - `backend/app/api/routes.py`: API endpoints (including `/api/mission/state`).
@@ -87,7 +87,7 @@ The repository already contains a working FastAPI application structure:
 
 ## 4. Hardware Pinout & Electrical Safety
 
-The ESP32 pin assignments are established and coordinated across firmware (`lander.ino`) and documentation (`Lander/lander/Mars_Lander_Wiring_Structure.txt`):
+The ESP32 pin assignments are established and coordinated across firmware (`lander.ino`) and documentation (`docs/wiring/lander-wiring.md`):
 
 | Component / Function | ESP32 GPIO | Electrical / Hardware Notes |
 | :--- | :--- | :--- |

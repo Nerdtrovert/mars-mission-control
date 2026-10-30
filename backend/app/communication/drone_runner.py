@@ -7,8 +7,6 @@ from datetime import datetime, timezone
 import json
 import logging
 import math
-import os
-import socket
 import time
 from typing import Any, Callable, Optional
 import urllib.error
@@ -39,7 +37,6 @@ class DroneRunner:
         http_url: str,
         publish: Callable[[DroneStatus], None],
         interval_s: float = 0.5,
-        forward_udp: Optional[bool] = None,
         udp_host: Optional[str] = None,
         udp_port: int = 5007,
     ) -> None:
@@ -52,22 +49,9 @@ class DroneRunner:
         self.is_running = False
         self._sim_tick = 0
 
-        # Forwarding simulated UDP to gateway so connected lander ESP receives mission_display
-        if forward_udp is None:
-            env_fwd = os.getenv("FORWARD_SIMULATED_UDP", "true").strip().lower()
-            self.forward_udp = env_fwd in ("true", "1", "yes")
-        else:
-            self.forward_udp = forward_udp
-
-        parsed_host = urlparse(self.http_url).hostname if self.http_url else None
-        self.udp_host = udp_host or parsed_host or "127.0.0.1"
+        # UDP forwarding removed - no hybrid mode
+        self.udp_host = udp_host or (urlparse(self.http_url).hostname if self.http_url else "127.0.0.1")
         self.udp_port = udp_port
-        self._udp_sock: Optional[socket.socket] = None
-        if self.forward_udp and self.mode == "simulator":
-            try:
-                self._udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            except Exception as e:
-                logger.debug("Failed to create drone UDP forwarding socket: %s", e)
 
         if mode == "simulator":
             self._last_status: DroneStatus = self.step_simulator()
@@ -153,24 +137,7 @@ class DroneRunner:
             except asyncio.CancelledError:
                 pass
             self._task = None
-        if self._udp_sock is not None:
-            try:
-                self._udp_sock.close()
-            except Exception:
-                pass
-            self._udp_sock = None
         self.is_running = False
-
-    def _forward_udp(self, status: DroneStatus) -> None:
-        """Forward simulated drone JSON datagram to the hardware gateway listener."""
-        if not self._udp_sock or not self.udp_host or not status.telemetry:
-            return
-        try:
-            payload = status.telemetry.model_dump(mode="json")
-            data_bytes = json.dumps(payload).encode("utf-8")
-            self._udp_sock.sendto(data_bytes, (self.udp_host, self.udp_port))
-        except Exception as exc:
-            logger.debug("Simulated drone UDP forward to %s:%s failed: %s", self.udp_host, self.udp_port, exc)
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
@@ -180,8 +147,6 @@ class DroneRunner:
                 self.publish(status)
             elif self.mode == "simulator":
                 status = self.step_simulator()
-                if self.forward_udp and status.telemetry is not None:
-                    self._forward_udp(status)
                 self.publish(status)
             await asyncio.sleep(self.interval_s)
 

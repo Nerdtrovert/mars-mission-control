@@ -10,9 +10,9 @@ from app.communication.gateway_contract import CommandName
 from app.communication.gateway_simulator import GatewaySimulator
 from app.communication.network_runner import NetworkGatewayRunner
 from app.communication.simulator_runner import SimulatorRunner
-from app.communication.rover_model import RoverSource, RoverStatus, offline_status
+from app.communication.rover_model import RoverStatus
 from app.communication.rover_runner import RoverRunner
-from app.communication.drone_model import DroneStatus, offline_drone_status
+from app.communication.drone_model import DroneStatus
 from app.communication.drone_runner import DroneRunner
 from app.mission.command import (
     CommandSafetyViolation,

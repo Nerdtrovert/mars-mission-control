@@ -3,19 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-import os
-import socket
 from typing import Any, Callable, Optional
 import urllib.error
 import urllib.request
 from urllib.parse import urlparse
-import json
 
 from app.communication.rover_model import (
-    RoverCommand,
-    RoverConnectionState,
-    RoverMode,
     RoverSource,
     RoverStatus,
     offline_status,
@@ -35,7 +30,6 @@ class RoverRunner:
         publish: Callable[[RoverStatus], None],
         interval_s: float = 0.2,
         simulator: Optional[RoverSimulator] = None,
-        forward_udp: Optional[bool] = None,
         udp_host: Optional[str] = None,
         udp_port: int = 5005,
     ) -> None:
@@ -51,22 +45,9 @@ class RoverRunner:
             RoverSource.SIMULATOR if mode == "simulator" else RoverSource.NETWORK
         )
 
-        # Forwarding simulated UDP to gateway so connected lander ESP receives mission_display
-        if forward_udp is None:
-            env_fwd = os.getenv("FORWARD_SIMULATED_UDP", "true").strip().lower()
-            self.forward_udp = env_fwd in ("true", "1", "yes")
-        else:
-            self.forward_udp = forward_udp
-
-        parsed_host = urlparse(self.http_url).hostname if self.http_url else None
-        self.udp_host = udp_host or parsed_host or "127.0.0.1"
+        # UDP forwarding removed - no hybrid mode
+        self.udp_host = udp_host or (urlparse(self.http_url).hostname if self.http_url else "127.0.0.1")
         self.udp_port = udp_port
-        self._udp_sock: Optional[socket.socket] = None
-        if self.forward_udp and self.mode == "simulator":
-            try:
-                self._udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            except Exception as e:
-                logger.debug("Failed to create rover UDP forwarding socket: %s", e)
 
     def snapshot(self) -> RoverStatus:
         return self._last_status.model_copy(deep=True)
@@ -88,36 +69,13 @@ class RoverRunner:
             except asyncio.CancelledError:
                 pass
             self._task = None
-        if self._udp_sock is not None:
-            try:
-                self._udp_sock.close()
-            except Exception:
-                pass
-            self._udp_sock = None
         self.is_running = False
-
-    def _forward_udp(self, status: RoverStatus) -> None:
-        """Forward simulated rover datagram to the hardware gateway listener."""
-        if not self._udp_sock or not self.udp_host:
-            return
-        try:
-            cmd = status.command.value if hasattr(status.command, "value") else str(status.command or "S")
-            mode = status.mode.value if hasattr(status.mode, "value") else str(status.mode or "M")
-            dist = status.distance_cm if status.distance_cm is not None else 100.0
-            pitch = status.pitch_deg if status.pitch_deg is not None else 0.0
-            roll = status.roll_deg if status.roll_deg is not None else 0.0
-            msg = f"DIST:{dist:.1f},PITCH:{pitch:.1f},ROLL:{roll:.1f},CMD:{cmd},MODE:{mode}".encode("ascii")
-            self._udp_sock.sendto(msg, (self.udp_host, self.udp_port))
-        except Exception as exc:
-            logger.debug("Simulated rover UDP forward to %s:%s failed: %s", self.udp_host, self.udp_port, exc)
 
     async def _run(self) -> None:
         try:
             while not self._stop_event.is_set():
                 if self.mode == "simulator":
                     self._last_status = self.simulator.step()
-                    if self.forward_udp and self._last_status.connection_state == RoverConnectionState.ONLINE:
-                        self._forward_udp(self._last_status)
                 else:
                     self._last_status = await asyncio.to_thread(self._fetch_network_status)
                 self.publish(self.snapshot())

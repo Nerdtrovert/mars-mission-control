@@ -2,7 +2,7 @@
 # ==============================================================================
 # Mars Mission Control — Raspberry Pi Edge Gateway Deployment Script
 # ==============================================================================
-# Deploys gateway files from MacBook Mission Control to Raspberry Pi 4 via rsync.
+# Deploys gateway files from development machine Mission Control to Raspberry Pi 4 via rsync.
 # Adheres strictly to AGENTS.md and safe deployment guidelines:
 # - Does not run git on the Raspberry Pi.
 # - Preserves existing .env, service configurations, SQLite DBs, and runtime state.
@@ -40,8 +40,9 @@ RSYNC_OPTS=(
     --exclude='backend/data/'
     --exclude='data/'
     --exclude='frontend/'
-    --exclude='Lander/lander/lander.ino'
-    --exclude='Lander/lander/lander_config.h'
+    --exclude='lander/lander.ino'
+    --exclude='lander/lander_config.h'
+    --exclude='lander/lander_config.example.h'
     --exclude='.pio/'
 )
 

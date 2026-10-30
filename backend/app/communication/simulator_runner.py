@@ -65,7 +65,8 @@ class SimulatorRunner:
         # 2. Ingest telemetry if gateway and device are connected
         if self.simulator.gateway_connected and self.simulator.device_connected:
             self.simulator.advance_clock(int(self.interval_s * 1000))
-            self.simulator.step_physical_movement()
+            if hasattr(self.simulator, "step_physical_movement"):
+                self.simulator.step_physical_movement()
             line = self.simulator.generate_telemetry_line()
             self.gateway_client.ingest_telemetry_line(line, timestamp=now_iso)
 

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Dark space background -->
+  <circle cx="32" cy="32" r="32" fill="#070302"/>
+
+  <!-- Mars planetary body -->
+  <circle cx="32" cy="32" r="26" fill="#c04128"/>
+
+  <!-- Mars surface details - darker regions -->
+  <ellipse cx="24" cy="24" rx="10" ry="6" fill="#a03520" opacity="0.6"/>
+  <ellipse cx="42" cy="38" rx="8" ry="5" fill="#a03520" opacity="0.5"/>
+  <ellipse cx="18" cy="44" rx="6" ry="4" fill="#a03520" opacity="0.4"/>
+  <ellipse cx="46" cy="18" rx="5" ry="3" fill="#a03520" opacity="0.4"/>
+
+  <!-- Subtle atmospheric glow -->
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#e05638" stroke-width="1.5" opacity="0.3"/>
+
+  <!-- Mission control indicator - small dot -->
+  <circle cx="50" cy="50" r="4" fill="#fbbf24" opacity="0.9"/>
+  <circle cx="50" cy="50" r="2" fill="#fff" opacity="0.6"/>
+</svg>

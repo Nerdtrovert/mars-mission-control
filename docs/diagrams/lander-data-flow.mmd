@@ -1,0 +1,21 @@
+```mermaid
+flowchart TD
+    subgraph LanderFlow["Lander Telemetry & Command Data Flow"]
+        Sensors["BMP280 & DHT11 Sensors\n(~1 Hz Active Polling)"] --> ESP32["Lander ESP32 Firmware"]
+        ESP32 -->|TCP Port 5006\nNewline-Delimited JSON| PiTCP["Raspberry Pi LanderTCPTransport\n(Framing & Ingestion)"]
+        PiTCP --> PiMgr["Raspberry Pi LanderManager\n(Command Tracking & Display Relay)"]
+        PiMgr -->|WebSocket /ws/telemetry\nover Port 8001| MacRunner["Mac NetworkGatewayRunner"]
+        MacRunner --> TelemService["Mac TelemetryService\n(Processor & Safety Range Validator)"]
+        TelemService --> SQLite["SQLite Storage\n(300s Sliding History)"]
+        TelemService --> StateMgr["Mac MissionStateManager\n(ACTIVE/STANDBY & ONLINE States)"]
+        StateMgr --> MacWS["Mac DashboardBroadcaster"]
+        MacWS -->|WebSocket Stream| Browser["Exhibition Browser HUD\n(Lander Station Page)"]
+
+        %% Operator Command Path
+        Browser -.->|POST /api/lander/command\n(SET_ACTIVE, SET_STANDBY)| BackendAPI["Mac Backend Routes"]
+        BackendAPI -.->|CommandTracker Safety Preconditions| Client["GatewayClient"]
+        Client -.->|POST /api/lander/command| PiMgr
+        PiMgr -.->|TCP Port 5006 JSON Command| ESP32
+        ESP32 -.->|TCP command_ack JSON| PiMgr
+    end
+```

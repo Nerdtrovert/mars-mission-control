@@ -1,0 +1,297 @@
+/**
+ * Mars Mission Control — Aerial Drone Dashboard Styles (Stage 2C)
+ * frontend/css/drone.css
+ * 
+ * Translucent glass aesthetic unified with the Mars surface theme.
+ * Uses amber/gold signals to distinctively identify the Aerial Drone subsystem.
+ */
+
+.drone-container {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 3rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  position: relative;
+  z-index: 10;
+}
+
+/* --- Top Subsystem Navigation Bar --- */
+.drone-navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.drone-tab-active {
+  background: rgba(251, 191, 36, 0.22) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--amber-400) !important;
+  box-shadow: 0 0 14px var(--amber-glow) !important;
+}
+
+/* --- Drone Main Grid Layout --- */
+.drone-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* Ensure grid children don't overflow their tracks */
+.drone-grid > .hud-card {
+  min-width: 0;
+}
+
+/* --- Card 1: Tactical Airspace Radar Map --- */
+.airspace-map-container {
+  position: relative;
+  width: 100%;
+  height: 380px;
+  background: rgba(7, 11, 20, 0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  min-width: 0; /* Prevent canvas overflow in grid */
+}
+
+.airspace-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.airspace-disclaimer-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: var(--amber-400);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.airspace-legend-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1.1rem;
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--slate-300);
+  min-width: 0; /* Prevent overflow in grid */
+  flex-wrap: wrap; /* Allow wrapping on narrow screens */
+  gap: 0.5rem;
+}
+
+.legend-dot-drone {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--amber-400);
+  box-shadow: 0 0 6px var(--amber-400);
+}
+
+/* --- Card 2: Drone Blueprint & Flight Attitude Horizon --- */
+.drone-blueprint-wrapper {
+  background: rgba(10, 15, 28, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 220px;
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+  min-width: 0; /* Prevent overflow in grid */
+}
+
+.drone-svg-schematic {
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+  color: var(--amber-400);
+  filter: drop-shadow(0 0 12px var(--amber-glow));
+  min-width: 0; /* Prevent SVG overflow */
+}
+
+.drone-blueprint-tag {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--slate-400);
+  letter-spacing: 0.08em;
+}
+
+/* Flight Status & Attitude HUD Box */
+.drone-attitude-card {
+  padding: 1.1rem 1.25rem;
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0; /* Prevent overflow in grid */
+}
+
+.drone-attitude-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.drone-flight-pill {
+  font-size: 0.80rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--radius-sm);
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: var(--amber-400);
+  font-weight: 800;
+}
+
+/* Gyroscope 3-Axis Display */
+.gyro-axes-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  text-align: center;
+}
+
+@media (max-width: 400px) {
+  .gyro-axes-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gyro-axis-item {
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  background: rgba(10, 15, 28, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 0; /* Prevent overflow in grid */
+}
+
+.gyro-axis-label {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--slate-400);
+  margin-bottom: 0.2rem;
+}
+
+.gyro-axis-val {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+/* --- Card 3: Drone Telemetry Grid (Full Width) --- */
+.drone-telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Responsive telemetry grid */
+@media (max-width: 1100px) {
+  .drone-telemetry-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .drone-telemetry-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Disclaimers & Footnotes Container */
+.drone-notes-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  color: var(--slate-400);
+  line-height: 1.5;
+}
+
+.drone-command-disclaimer {
+  color: #cbd5e1;
+}
+
+.drone-event-banner {
+  padding: 0.85rem 1.1rem;
+  background: rgba(15, 23, 42, 0.45);
+  border-left: 3px solid var(--amber-400);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--amber-400);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .drone-telemetry-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .drone-grid {
+    grid-template-columns: 1fr;
+  }
+  .drone-navbar {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .drone-telemetry-grid {
+    grid-template-columns: 1fr;
+  }
+}

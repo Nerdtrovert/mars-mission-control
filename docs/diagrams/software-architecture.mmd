@@ -1,0 +1,64 @@
+```mermaid
+flowchart TD
+    subgraph FrontendLayer["Presentation Layer (Browser)"]
+        LandingView["Landing Subsystem Hub\n(landing.js)"]
+        LanderView["Lander Station HUD\n(lander-view.js)"]
+        RoverView["Rover Tactical HUD\n(rover-view.js)"]
+        DroneView["Drone Recon Radar HUD\n(drone-view.js)"]
+        MissionClient["Mission WebSocket Client\n(mission-client.js)"]
+
+        LandingView <--> MissionClient
+        LanderView <--> MissionClient
+        RoverView <--> MissionClient
+        DroneView <--> MissionClient
+    end
+
+    subgraph BackendAPI["Backend Core Layer (FastAPI :8000)"]
+        Routes["API Endpoints\n(/api/mission/*, /api/rover/*, /api/drone/*)"]
+        Broadcaster["DashboardBroadcaster\n(Thread-Safe Async WebSocket)"]
+        StateManager["MissionStateManager\n(Device & Gateway States)"]
+        TelemetryService["TelemetryService\n(Processor & Validator)"]
+        CommandTracker["CommandTracker\n(Phase B Precondition Safety)"]
+        SQLiteStorage["SQLiteStorage\n(WAL Mode, 5-Min Pruning)"]
+
+        Routes <--> Broadcaster
+        Routes <--> StateManager
+        Routes <--> CommandTracker
+        TelemetryService --> StateManager
+        TelemetryService --> SQLiteStorage
+        CommandTracker --> SQLiteStorage
+    end
+
+    subgraph CommunicationRunners["Communication Runner Layer"]
+        NetworkRunner["NetworkGatewayRunner\n(Real Hardware Mode)"]
+        SimRunner["SimulatorRunner\n(Standalone Sim Mode)"]
+        RoverRunner["RoverRunner\n(HTTP Polling or Simulator)"]
+        DroneRunner["DroneRunner\n(HTTP Polling or Simulator)"]
+        SimLander["GatewaySimulator\n(In-Memory Deterministic Sensors)"]
+        SimRover["RoverSimulator\n(Deterministic Kinematics)"]
+
+        NetworkRunner <--> StateManager
+        NetworkRunner --> TelemetryService
+        SimRunner <--> SimLander
+        SimRunner --> TelemetryService
+        RoverRunner <--> SimRover
+        RoverRunner --> Broadcaster
+        DroneRunner --> Broadcaster
+    end
+
+    subgraph EdgeGateway["Raspberry Pi Edge Gateway Layer (:8001)"]
+        LanderManager["LanderManager\n(TCP Session, Command ACK, Display Relay)"]
+        LanderTransport["LanderTCPTransport\n(Asyncio Socket Server :5006)"]
+        RoverUDP["RoverUDPReceiver\n(Asyncio Datagram :5005)"]
+        DroneUDP["DroneUDPReceiver\n(RFC 1982 Sequence Tracking :5007)"]
+        GatewayRoutes["Gateway REST & WS Endpoints"]
+
+        LanderTransport <--> LanderManager
+        RoverUDP --> LanderManager
+        DroneUDP --> LanderManager
+        LanderManager <--> GatewayRoutes
+    end
+
+    MissionClient <==>|WebSocket Stream & REST| Routes
+    NetworkRunner <==>|WebSocket Client & REST Client| GatewayRoutes
+```

@@ -1,0 +1,12 @@
+```mermaid
+flowchart TD
+    subgraph DroneFlow["Aerial Drone Telemetry Data Flow"]
+        Sensors["GPS, IMU, Env & Battery Sensors"] --> DroneMCU["Drone ESP32 Controller"]
+        DroneMCU -->|UDP Port 5007\nJSON Datagram| PiUDP["Raspberry Pi DroneUDPReceiver\n(RFC 1982 Rollover & Validation)"]
+        PiUDP -->|Internal Message Bus| PiMgr["Pi LanderManager"]
+        PiMgr -->|mission_display JSON\nover TCP Port 5006| LanderLCD["Lander ESP32 20x4 LCD\n(Page 4: AERIAL DRONE)"]
+        PiMgr -->|WebSocket /ws/telemetry\nover Port 8001| MacRunner["Mac DroneRunner / NetworkRunner"]
+        MacRunner -->|Broadcast Sync| MacWS["Mac DashboardBroadcaster"]
+        MacWS -->|WebSocket Stream| Browser["Exhibition Browser HUD\n(Drone Recon Radar Page)"]
+    end
+```

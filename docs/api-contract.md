@@ -36,7 +36,7 @@ lander receipt timestamp. GATEWAY_STALE_TIMEOUT_S and
 GATEWAY_OFFLINE_TIMEOUT_S determine STALE/OFFLINE state. USB serial is reserved
 for programming and local debug output.
 
-The MacBook still uses the Pi's existing HTTP and WebSocket APIs. Its
+The development machine backend still uses the Pi's existing HTTP and WebSocket APIs. Its
 GATEWAY_HTTP_URL and GATEWAY_WS_URL settings are unchanged. Rover telemetry
 continues to arrive at the Pi by UDP port 5005.
 
@@ -103,9 +103,9 @@ Both Pi and Mac expose the same public drone fields: `drone_id`, `flight_status`
 `latitude`, `longitude`, `altitude_m`, `battery_percentage`, `connection_state`,
 `last_seen`, `source`, and `telemetry` (the full parsed datagram when online).
 Simulator mode uses `source: "simulator"`; network mode uses `source: "network"`.
-Mac WebSocket updates use `{ "type": "drone_telemetry", "drone": <status> }`.
+Backend WebSocket updates use `{ "type": "drone_telemetry", "drone": <status> }`.
 
-## MacBook Mission Control API and live updates
+## Development Machine Mission Control API and live updates
 
 The existing `/api/mission/state`, `/api/mission/telemetry/history`,
 `/api/mission/commands`, `/api/mission/events`, `/api/mission/session/reset`,

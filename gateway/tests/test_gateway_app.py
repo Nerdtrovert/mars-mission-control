@@ -1,6 +1,5 @@
 """Integration tests for the Raspberry Pi Gateway router and application lifecycle."""
 
-import asyncio
 import pytest
 
 from starlette.websockets import WebSocketState
@@ -12,7 +11,6 @@ from app.communication.gateway_contract import (
 )
 from gateway.config import GatewayConfig
 from gateway.main import create_gateway_app
-from gateway.routes import create_gateway_router
 from gateway.tcp_transport import LanderTCPTransport
 from gateway.ws_manager import WebSocketBroadcaster
 
@@ -63,7 +61,6 @@ async def test_gateway_app_lifespan_starts_and_stops_cleanly():
 async def test_gateway_router_endpoints_match_contracts():
     config = GatewayConfig(lander_tcp_host="127.0.0.1", lander_tcp_port=0)
     transport = LanderTCPTransport(config.lander_tcp_host, config.lander_tcp_port)
-    broadcaster = WebSocketBroadcaster()
     app = create_gateway_app(config=config, transport=transport)
     lander_mgr = app.state.lander_manager
 

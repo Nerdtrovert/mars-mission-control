@@ -1,0 +1,76 @@
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator as Exhibition Operator
+    participant Browser as Browser Dashboard
+    participant Backend as MacBook Backend (:8000)
+    participant Gateway as Raspberry Pi Gateway (:8001)
+    participant Lander as ESP32 Lander (TCP :5006)
+    participant Rover as Rover GUI (UDP :5005)
+    participant Drone as Drone ESP32 (UDP :5007)
+
+    %% -------------------------------------------------------------------------
+    %% SCENARIO 1: LANDER TELEMETRY & DISPLAY RELAY
+    %% -------------------------------------------------------------------------
+    rect rgb(240, 245, 255)
+    Note over Lander, Browser: 1. Lander Streaming & LCD Telemetry Relay
+    Lander->>Gateway: TCP 5006: {"type":"telemetry", "timestamp_ms":1000, "bmp_temperature_c":24.2, ...}\n
+    Gateway->>Gateway: Buffer line, validate JSON framing, reset silence timer
+    Gateway->>Backend: WS /ws/telemetry: {"type":"telemetry", ...}
+    Backend->>Backend: TelemetryService: validate sensor ranges, insert SQLite history
+    Backend->>Backend: MissionStateManager: update last_seen, verify ONLINE
+    Backend->>Browser: WS /ws/telemetry: {"type":"telemetry", "state":{...}}
+    Browser->>Browser: Update Dials (BMP 24.2°C, Pressure 1013.5 hPa), refresh charts
+    end
+
+    %% -------------------------------------------------------------------------
+    %% SCENARIO 2: ROVER INGESTION & DISPLAY RELAY
+    %% -------------------------------------------------------------------------
+    rect rgb(245, 255, 245)
+    Note over Rover, Lander: 2. Surface Rover Telemetry Ingestion & LCD Display Relay
+    Rover->>Gateway: UDP 5005: DIST:145.2,PITCH:0.5,ROLL:-0.8,CMD:F,MODE:M
+    Gateway->>Gateway: Parse ASCII, clamp values, mark Rover ONLINE
+    par Broadcast to Mission Control
+        Gateway->>Backend: WS /ws/telemetry: {"type":"rover_telemetry", "rover":{...}}
+        Backend->>Browser: WS: {"type":"rover_telemetry", "rover":{...}}
+        Browser->>Browser: Update Rover Compass, Radar & Distance
+    and Relay to Physical Lander LCD
+        Gateway->>Lander: TCP 5006: {"type":"mission_display", "device":"rover", "connected":true, "data":{...}}\n
+        Lander->>Lander: Update Page 3 (MARS ROVER) -> LIVE: DIST 145.2cm, P:0.5 R:-0.8
+    end
+    end
+
+    %% -------------------------------------------------------------------------
+    %% SCENARIO 3: DRONE INGESTION & DISPLAY RELAY
+    %% -------------------------------------------------------------------------
+    rect rgb(255, 250, 240)
+    Note over Drone, Lander: 3. Drone Telemetry Ingestion & LCD Display Relay
+    Drone->>Gateway: UDP 5007: {"device_id":"esp32-drone", "sequence":1042, "flight_status":"CRUISING", ...}
+    Gateway->>Gateway: DroneUDPReceiver: RFC 1982 sequence check, mark Drone ONLINE
+    par Broadcast to Mission Control
+        Gateway->>Backend: WS /ws/telemetry: {"type":"drone_telemetry", "drone":{...}}
+        Backend->>Browser: WS: {"type":"drone_telemetry", "drone":{...}}
+        Browser->>Browser: Update Drone Airspace Radar, Artificial Horizon, GPS
+    and Relay to Physical Lander LCD
+        Gateway->>Lander: TCP 5006: {"type":"mission_display", "device":"drone", "connected":true, "data":{...}}\n
+        Lander->>Lander: Update Page 4 (AERIAL DRONE) -> LIVE: CRUISING, LAT, LON
+    end
+    end
+
+    %% -------------------------------------------------------------------------
+    %% SCENARIO 4: OPERATOR COMMAND DISPATCH WITH SAFETY INTERLOCK
+    %% -------------------------------------------------------------------------
+    rect rgb(255, 240, 245)
+    Note over Operator, Lander: 4. Operator Command Execution (SET_ACTIVE)
+    Operator->>Browser: Click [SET ACTIVE] Button
+    Browser->>Backend: POST /api/lander/command: {"command": "SET_ACTIVE"}
+    Backend->>Backend: CommandTracker: verify safety preconditions (device_state == ONLINE)
+    Backend->>Gateway: POST /api/lander/command: {"command_id":"...", "command":"SET_ACTIVE"}
+    Gateway->>Lander: TCP 5006: {"command":"SET_ACTIVE", "request_id":42}\n
+    Lander->>Lander: Switch mode to OPMODE_ACTIVE, enable sensor polling timer
+    Lander->>Gateway: TCP 5006: {"type":"command_ack", "command":"SET_ACTIVE", "ok":true, "request_id":42}\n
+    Gateway->>Backend: Return HTTP 200 OK: {"accepted":true, "reason":null}
+    Backend->>Browser: Return HTTP 200 OK & broadcast command_update
+    Browser->>Browser: Show green feedback toast: "SET_ACTIVE ACCEPTED"
+    end
+```

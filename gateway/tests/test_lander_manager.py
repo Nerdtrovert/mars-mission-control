@@ -1,7 +1,6 @@
 """Unit and integration tests for LanderManager logic on Raspberry Pi Gateway."""
 
 import asyncio
-from datetime import datetime, timezone
 import json
 import pytest
 

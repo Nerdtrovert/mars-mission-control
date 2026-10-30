@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Optional
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from app.communication.gateway_contract import (

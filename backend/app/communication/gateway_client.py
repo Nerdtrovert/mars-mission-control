@@ -1,12 +1,11 @@
 """Gateway Client Adapter for Mars Mission Control.
 
-Acts as the MacBook backend adapter to interface with the Raspberry Pi
+Acts as the development machine backend adapter to interface with the Raspberry Pi
 hardware gateway (or the in-process GatewaySimulator during development and testing).
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
 import logging
 from typing import Any, Optional
@@ -24,11 +23,7 @@ from app.communication.gateway_contract import (
 from app.communication.gateway_simulator import GatewaySimulator
 from app.mission.command import (
     Command,
-    CommandAvailability,
-    CommandSafetyViolation,
-    CommandStatus,
     CommandTracker,
-    DuplicateCommandError,
 )
 from app.mission.state import MissionStateManager
 from app.telemetry.processor import TelemetryError
@@ -59,7 +54,7 @@ def _http_post_json(url: str, data: dict[str, Any], timeout: float = 5.0) -> dic
 
 class GatewayClient:
     """
-    Adapter used by the MacBook backend to interact with the Raspberry Pi gateway.
+    Adapter used by the development machine backend to interact with the Raspberry Pi gateway.
     Can be backed by an in-memory GatewaySimulator or network HTTP/WebSocket requests.
     """
 

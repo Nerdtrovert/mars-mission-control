@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-FIRMWARE = Path(__file__).resolve().parents[2] / "Lander" / "lander" / "lander.ino"
+FIRMWARE = Path(__file__).resolve().parents[2] / "Lander" / "lander.ino"
 
 
 def test_lander_firmware_keeps_sensor_display_led_and_usb_debug():

@@ -10,7 +10,7 @@ import asyncio
 from datetime import datetime, timezone
 import json
 import logging
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 from app.communication.gateway_client import GatewayClient
 from app.mission.state import MissionStateManager

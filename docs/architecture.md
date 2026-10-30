@@ -3,7 +3,7 @@
 ## Components and ownership
 
 ```text
-Lander ESP32 --private Wi-Fi, TCP/JSON (5006)--> Raspberry Pi gateway --HTTP/WebSocket (8001)--> Mac backend
+Lander ESP32 --private Wi-Fi, TCP/JSON (5006)--> Raspberry Pi gateway --HTTP/WebSocket (8001)--> Development machine backend
                                                    ^  ^                                           | SQLite + dashboard
                                     UDP 5005       |  |  UDP 5007                                 v
 Rover ESP32 --HC-12 9600--> Windows GUI ----------+  |                                       Browser / exhibition TV
@@ -21,7 +21,7 @@ Drone ESP32 --local-network UDP 5007 ----------------+
   The gateway forwards live rover and drone display messages to the connected lander
   over TCP. All receivers are managed within the gateway FastAPI lifespan.
   Gateway process health is separate from device connectivity.
-- **MacBook backend** owns mission state, SQLite persistence, command auditing,
+- **Development machine backend** owns mission state, SQLite persistence, command auditing,
   API, and dashboard WebSocket/polling. In network mode it obtains lander and
   rover telemetry from the Pi; it never opens device serial ports.
 - **Dashboard** shows separate lander, rover, and drone status. A reported rover
@@ -36,12 +36,12 @@ telemetry at about 1 Hz in ACTIVE mode. The gateway validates each frame,
 updates device status only for valid messages, and broadcasts telemetry through
 its existing /ws/telemetry endpoint. After GATEWAY_OFFLINE_TIMEOUT_S without a
 valid frame, the device is OFFLINE and cached sensor values are cleared. The
-Mac NetworkGatewayRunner processes the same message contract as simulator
+The development machine NetworkGatewayRunner processes the same message contract as simulator
 mode, persists it, and broadcasts dashboard updates. Sensor failures remain
 null with false health flags.
 
 Configure the lander locally by copying
-Lander/lander/lander_config.example.h to lander_config.h and entering the
+lander/lander_config.example.h to lander_config.h and entering the
 private Wi-Fi SSID/password and Pi address. The real configuration header is
 ignored by git. The ESP32 and Pi must join the same private LAN. The project
 does not invent Wi-Fi credentials or a static IP plan, and it does not configure

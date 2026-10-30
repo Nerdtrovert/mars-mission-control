@@ -1,0 +1,79 @@
+```mermaid
+flowchart TD
+    subgraph LanderSubsystem["ESP32 Lander Subsystem"]
+        LanderMCU["ESP32-WROOM-32 DevKit V1"]
+        BMP280["BMP280 (I2C: 0x76)\nTemp & Pressure"]
+        DHT11["DHT11 (GPIO 17)\nTemp & Humidity"]
+        LCD["20x4 LCD (I2C: 0x27)\nRotating Telemetry Pages"]
+        LEDs["Status LEDs\nGreen (GPIO 25) / Red (GPIO 26)"]
+
+        LanderMCU -->|I2C 100kHz| BMP280
+        LanderMCU -->|1-Wire| DHT11
+        LanderMCU -->|I2C 100kHz| LCD
+        LanderMCU -->|GPIO| LEDs
+    end
+
+    subgraph RoverSubsystem["Surface Rover Subsystem"]
+        RoverSensors["Sensors:\nHC-SR04 (Distance)\nMPU6050 (Pitch & Roll)"]
+        RoverMCU["Rover Controller"]
+        HC12_TX["HC-12 Transceiver (433 MHz)"]
+        HC12_RX["HC-12 USB Receiver"]
+        RoverLaptop["Rover Laptop\nWindows Tkinter GUI"]
+
+        RoverSensors --> RoverMCU
+        RoverMCU -->|9600 baud UART| HC12_TX
+        HC12_TX -.->|Wireless 433 MHz RF| HC12_RX
+        HC12_RX -->|USB Virtual COM Port| RoverLaptop
+    end
+
+    subgraph DroneSubsystem["Aerial Drone Subsystem"]
+        DroneMCU["Drone Controller (ESP32)"]
+        DroneSensors["Sensors:\nGPS (Lat/Lon/Alt)\nIMU (Roll/Pitch/Yaw)\nEnvironment & Battery"]
+
+        DroneSensors --> DroneMCU
+    end
+
+    subgraph PiGateway["Raspberry Pi 4 Gateway (192.168.50.1)"]
+        LanderTCP["LanderTCPTransport\n(TCP Port 5006)"]
+        RoverUDP["RoverUDPReceiver\n(UDP Port 5005)"]
+        DroneUDP["DroneUDPReceiver\n(UDP Port 5007)"]
+        LanderManager["LanderManager\n(Session & Display Relay)"]
+        GatewayAPI["FastAPI Daemon\n(HTTP & WS Port 8001)"]
+
+        LanderTCP <--> LanderManager
+        RoverUDP --> LanderManager
+        DroneUDP --> LanderManager
+        LanderManager --> GatewayAPI
+    end
+
+    subgraph CentralHost["MacBook Mission Control"]
+        BackendAPI["FastAPI Backend (Port 8000)"]
+        NetworkRunner["NetworkGatewayRunner\n(WS & HTTP Client)"]
+        StateManager["MissionStateManager\n(Thread-Safe Mission State)"]
+        TelemetryService["TelemetryService\n(Processor & Validator)"]
+        Storage["SQLite Storage\n(5-Min Sliding Retention)"]
+        DashboardWS["WebSocket Broadcaster"]
+
+        NetworkRunner <--> BackendAPI
+        BackendAPI --> StateManager
+        BackendAPI --> TelemetryService
+        TelemetryService --> Storage
+        TelemetryService --> StateManager
+        StateManager --> DashboardWS
+    end
+
+    subgraph Presentation["Exhibition Presentation"]
+        WebDashboard["Mission Control HUD\n(Browser: /college or /dashboard)"]
+        ExhibitionTV["Exhibition TV Screen\n(Direct HDMI Sink)"]
+
+        DashboardWS -.->|WebSocket /ws/telemetry| WebDashboard
+        CentralHost ===>|Direct HDMI Video Cable| ExhibitionTV
+    end
+
+    %% Network Connections
+    LanderMCU <==>|Wi-Fi TCP :5006\nNewline JSON| LanderTCP
+    RoverLaptop ==>|Wi-Fi UDP :5005\nASCII Datagram| RoverUDP
+    DroneMCU ==>|Wi-Fi UDP :5007\nJSON Datagram| DroneUDP
+    GatewayAPI <==>|Local Wi-Fi HTTP/WS :8001\nJSON REST & Stream| NetworkRunner
+    LanderManager -.->|mission_display\nLCD Page 3 & 4| LanderTCP
+```

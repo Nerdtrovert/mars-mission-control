@@ -1,6 +1,6 @@
 from pathlib import Path
 import pytest
-from app.main import app, COLLEGE_DIR
+from app.main import app, FRONTEND_DIR
 
 
 async def asgi_request(path: str, method: str = "GET") -> tuple[int, dict[str, str], bytes]:
@@ -44,13 +44,13 @@ async def asgi_request(path: str, method: str = "GET") -> tuple[int, dict[str, s
     return status_code, headers, body
 
 
-def test_college_frontend_directory_and_assets_exist():
-    assert COLLEGE_DIR.exists(), f"College frontend dir missing at {COLLEGE_DIR}"
-    assert (COLLEGE_DIR / "index.html").is_file()
+def test_frontend_directory_and_assets_exist():
+    assert FRONTEND_DIR.exists(), f"Frontend dir missing at {FRONTEND_DIR}"
+    assert (FRONTEND_DIR / "index.html").is_file()
 
     # CSS files
     for css_file in ["theme.css", "landing.css", "lander.css", "rover.css", "drone.css"]:
-        assert (COLLEGE_DIR / "css" / css_file).is_file(), f"Missing CSS file: {css_file}"
+        assert (FRONTEND_DIR / "css" / css_file).is_file(), f"Missing CSS file: {css_file}"
 
     # JS files
     for js_file in [
@@ -61,11 +61,11 @@ def test_college_frontend_directory_and_assets_exist():
         "landing.js",
         "mission-client.js",
     ]:
-        assert (COLLEGE_DIR / "js" / js_file).is_file(), f"Missing JS file: {js_file}"
+        assert (FRONTEND_DIR / "js" / js_file).is_file(), f"Missing JS file: {js_file}"
 
 
-def test_college_index_html_contracts():
-    html = (COLLEGE_DIR / "index.html").read_text(encoding="utf-8")
+def test_frontend_index_html_contracts():
+    html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
 
     # All 4 subsystem views present
     assert 'id="landing-view"' in html
@@ -79,17 +79,17 @@ def test_college_index_html_contracts():
     assert 'id="btn-cmd-standby"' in html
     assert 'id="btn-cmd-reset"' in html
 
-    # Script tags in order
-    assert '<script src="js/formatters.js"></script>' in html
-    assert '<script src="js/lander-view.js"></script>' in html
-    assert '<script src="js/rover-view.js"></script>' in html
-    assert '<script src="js/drone-view.js"></script>' in html
-    assert '<script src="js/landing.js"></script>' in html
-    assert '<script src="js/mission-client.js"></script>' in html
+    # Script tags in order (served from /static/)
+    assert '<script src="/static/js/formatters.js"></script>' in html
+    assert '<script src="/static/js/lander-view.js"></script>' in html
+    assert '<script src="/static/js/rover-view.js"></script>' in html
+    assert '<script src="/static/js/drone-view.js"></script>' in html
+    assert '<script src="/static/js/landing.js"></script>' in html
+    assert '<script src="/static/js/mission-client.js"></script>' in html
 
 
-def test_college_mission_client_integration():
-    client_js = (COLLEGE_DIR / "js" / "mission-client.js").read_text(encoding="utf-8")
+def test_frontend_mission_client_integration():
+    client_js = (FRONTEND_DIR / "js" / "mission-client.js").read_text(encoding="utf-8")
 
     # WebSocket connection & protocol
     assert "/ws/telemetry" in client_js
@@ -114,16 +114,8 @@ def test_college_mission_client_integration():
 
 
 @pytest.mark.anyio
-async def test_college_http_redirect_and_headers():
-    status, headers, _ = await asgi_request("/college")
-    assert status == 307
-    assert headers.get("location") == "/college/"
-    assert "no-cache" in headers.get("cache-control", "")
-
-
-@pytest.mark.anyio
-async def test_college_http_serves_html():
-    status, headers, body = await asgi_request("/college/")
+async def test_dashboard_http_serves_html():
+    status, headers, body = await asgi_request("/dashboard")
     assert status == 200
     assert "text/html" in headers.get("content-type", "")
     assert "no-cache" in headers.get("cache-control", "")
@@ -131,8 +123,16 @@ async def test_college_http_serves_html():
 
 
 @pytest.mark.anyio
-async def test_college_http_serves_mission_client_js():
-    status, headers, body = await asgi_request("/college/js/mission-client.js")
+async def test_dashboard_http_serves_mission_client_js():
+    # The new frontend serves JS from /static/js/ since it's mounted at /static
+    status, headers, body = await asgi_request("/static/js/mission-client.js")
     assert status == 200
     assert "no-cache" in headers.get("cache-control", "")
     assert b"window.MMCMissionClient" in body
+
+
+@pytest.mark.anyio
+async def test_dashboard_http_serves_css():
+    status, headers, body = await asgi_request("/static/css/theme.css")
+    assert status == 200
+    assert "no-cache" in headers.get("cache-control", "")
